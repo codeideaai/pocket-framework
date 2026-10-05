@@ -1,0 +1,13 @@
+{
+  "name": "Pocket Notes — local learning API",
+  "baseURL": "http://127.0.0.1:8080",
+  "storage": "In memory only. All notes disappear when the process exits.",
+  "authentication": "None. Intended for local learning.",
+  "routes": [
+    {"method":"GET","path":"/health","status":200,"response":{"status":"ok"}},
+    {"method":"GET","path":"/notes","status":200,"response":[{"id":1,"title":"Learn Go"}]},
+    {"method":"POST","path":"/notes","contentType":"application/json","maxBodyBytes":4096,"request":{"title":"Learn Go"},"validation":"Exactly one JSON value, unknown fields rejected, trimmed title contains 1–120 Unicode code points.","status":201,"response":{"id":1,"title":"Learn Go"},"errors":{"400":"Invalid JSON or title","413":"Body limit encountered while decoding","415":"Unsupported media type","500":"Store operation failed"}}
+  ],
+  "routingErrors": {"404":"Path not found","405":"Method not allowed; response includes Allow"},
+  "notes": "GET patterns also serve HEAD. Application responses use JSON; standard router errors use plain text. This is a reading aid, not an OpenAPI specification."
+}

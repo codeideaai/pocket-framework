@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pocket Notes</title>
+<style>body{max-width:640px;margin:10vh auto;padding:24px;font:18px/1.6 system-ui;background:#faf8f2;color:#202722}input,button{padding:12px;font:inherit}input{min-width:0;flex:1}form{display:flex;gap:10px}button{background:#264d3b;color:white;border:0;border-radius:4px}li{padding:12px;border-bottom:1px solid #ddd}small{color:#666}#message{min-height:2em}</style>
+<h1>Pocket Notes</h1><p>A small local notebook. Notes disappear when the server restarts.</p>
+<form id="form"><input id="title" aria-label="Note title" placeholder="What did you learn?" required><button>Save</button></form>
+<p id="message" role="status"></p><ul id="list"></ul>
+<script>
+const form=document.getElementById('form'),input=document.getElementById('title'),list=document.getElementById('list'),message=document.getElementById('message');
+async function read(){const r=await fetch('/notes');if(!r.ok)throw new Error(`HTTP ${r.status}`);const notes=await r.json();list.replaceChildren();for(const note of notes){const li=document.createElement('li');li.textContent=note.title;list.append(li)}}
+form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;let saved=false;try{const r=await fetch('/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:input.value})});const result=await r.json();if(!r.ok)throw new Error(result.error||`HTTP ${r.status}`);saved=true;input.value='';await read();message.textContent='Saved.'}catch(error){message.textContent=(saved?'Saved, but refreshing the list failed. Reload the page. ':'')+error.message}finally{button.disabled=false}});
+read().catch(error=>message.textContent=error.message);
+</script></html>
