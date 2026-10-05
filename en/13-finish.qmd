@@ -1,0 +1,70 @@
+---
+title: "Ship a small thing you understand"
+description: "Run the complete project, inspect its boundaries, and plan the next iteration."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/13-finish.html">
+    <meta name="pocket-chinese" content="../zh/13-finish.html">
+    <meta name="pocket-chapter" content="13-finish">
+---
+
+::: {.chapter-intro}
+13 / POCKET NOTES · 15 min lesson · Go 1.22+
+
+[English](../en/13-finish.qmd) · [中文](../zh/13-finish.qmd)
+:::
+
+<!-- article-body -->
+
+## Trace the whole path once more {#section-0}
+
+A POST request reaches the server, passes through the timing middleware, matches a route in Engine, and receives a mini.Context. The handler checks the media type, decodes one bounded JSON value, validates its title, and calls NoteStore.Create. The store assigns an ID under a lock. The handler sends a JSON response and the middleware records elapsed time.
+
+Every piece now has a reason to exist. The framework handles reusable HTTP mechanics. The application owns note rules. The storage implementation owns its synchronization and state. main owns the process lifecycle. You can explain the architecture by following one request rather than memorizing a diagram.
+
+Use the commands below from examples/notebook. In a fresh process, GET /notes returns []; after one successful POST, it returns one note. Run the test suite before and after making your own change.
+
+**Terminal · examples/notebook**
+
+```sh
+go test ./...
+go build -o notebook .
+./notebook
+# In a second terminal:
+# curl http://127.0.0.1:8080/notes
+# curl -H 'Content-Type: application/json' #   -d '{"title":"I can trace a request"}' http://127.0.0.1:8080/notes
+```
+
+## Release is a repeatable process {#section-1}
+
+For this local project, delivery means a tested source tree and a binary built for your operating system. A Linux machine cannot run a macOS binary. Build for the intended target, record the source revision, and keep the runtime configuration separate from the executable.
+
+Before a real deployment, implement durable storage and the access model your users need. Put the server behind appropriate HTTPS termination, run it under a process supervisor, and arrange logs and backups. Changing 127.0.0.1 to a public listen address is not a deployment plan.
+
+A useful release exercise has four steps: start the new version in a test environment, check readiness and one real create/list flow, stop it with the expected signal, and rehearse returning to the previous version. Database migrations may make rollback harder than swapping binaries, so test those changes separately.
+
+## Choose one next feature and define done {#section-2}
+
+A good next feature is GET /notes/{id}. Start with observable behavior: an existing ID returns one note, an absent ID returns 404, and a malformed ID returns 400. Add a store method, implement it with the same locking discipline, register the route, then test those three cases.
+
+Another useful feature is pagination. Define a maximum page size and a stable ordering before writing the query. A third is persistent storage, using the adapter plan from article 10. Pick one; changing routing, storage, accounts, and deployment together makes failures difficult to isolate.
+
+You have built a small educational framework, not a replacement for every production framework. That is still a meaningful result: you can now judge a library by the work it removes, the behavior it guarantees, and the complexity it adds. Keep the parts that help your application, and let real requirements justify the next abstraction.
+
+::: {.callout-tip}
+## Try it yourself
+
+Define three acceptance checks for your first extension before writing its implementation.
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+For GET /notes/{id}: a saved ID returns 200 with the correct note; an absent ID returns 404; a non-integer ID returns 400. These checks guide both implementation and tests.
+:::
+
+## Further reading
+
+- [Go build command](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies)

@@ -1,0 +1,85 @@
+---
+title: "Wrap a handler without changing its job"
+description: "Use middleware for request timing and learn why order matters."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/05-middleware.html">
+    <meta name="pocket-chinese" content="../zh/05-middleware.html">
+    <meta name="pocket-chapter" content="05-middleware">
+---
+
+::: {.chapter-intro}
+05 / POCKET NOTES · 12 min lesson · Go 1.22+
+
+[English](../en/05-middleware.qmd) · [中文](../zh/05-middleware.qmd)
+:::
+
+<!-- article-body -->
+
+## One shared behavior, many routes {#section-0}
+
+Suppose every request should produce a timing log. Adding the same clock code to all three handlers is possible, but the fourth handler might forget it. The shared behavior belongs around the application’s handler.
+
+Middleware takes an http.Handler and returns another http.Handler. The returned handler can do work before and after calling the original one. Our access logger records a start time, calls next.ServeHTTP, then logs the elapsed duration. The note handlers remain focused on notes.
+
+This middleware measures the duration of the downstream handler call. It does not measure when a user finishes receiving the response across the network, and it does not record a status code. Being precise about what a metric measures makes the log useful.
+
+## Read the function from the inside out {#section-1}
+
+The innermost function handles one request. The function around it receives next, the handler it should call. The outermost accessLog function receives the logger. This arrangement captures the logger once at startup and uses it for many requests.
+
+Calling next passes control inward. Returning from next brings control back to the middleware. If middleware chooses to reject a request, it can write an error and return without calling next. Authentication often uses that shape.
+
+Do not add a goroutine merely to make middleware “asynchronous.” ResponseWriter has a request lifetime, and concurrent writes create correctness problems. Synchronous wrapping is enough for this logger.
+
+**examples/notebook/app.go · excerpt**
+
+```go
+func accessLog(logger *slog.Logger) mini.Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            start := time.Now()
+            next.ServeHTTP(w, r)
+            logger.Info("request", "method", r.Method,
+                "path", r.URL.Path, "duration", time.Since(start))
+        })
+    }
+}
+```
+
+## Order is part of the behavior {#section-2}
+
+Chain(app, A, B) should execute A before B before app, then return through B and A. The chain builder therefore wraps from the end of the list toward the beginning. This is easier to verify by writing the nesting: A(B(app)).
+
+Try adding temporary “before” and “after” logs to two middleware functions. Predict the output on paper first. If an authorization layer returns early, anything inside it does not run. A logger outside it can still record the rejected request.
+
+Our logger records paths but avoids bodies and credentials. Extra detail is not always helpful: a log that contains a password is now a second place that password must be protected.
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+func Chain(handler http.Handler, middleware ...Middleware) http.Handler {
+    for i := len(middleware)-1; i >= 0; i-- {
+        handler = middleware[i](handler)
+    }
+    return handler
+}
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+For A(B(app)), what is the normal before/after order?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+A before → B before → app → B after → A after. An early return can prevent the inner stages from running.
+:::
+
+## Further reading
+
+- [Handler interface](https://pkg.go.dev/net/http#Handler)

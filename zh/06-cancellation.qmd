@@ -1,0 +1,88 @@
+---
+title: "停止已经没有必要的工作"
+description: "通过协作式取消停止工作，避免并发写响应。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/06-cancellation.html">
+    <meta name="pocket-chinese" content="../zh/06-cancellation.html">
+    <meta name="pocket-chapter" content="06-cancellation">
+---
+
+::: {.chapter-intro}
+06 / POCKET NOTES · 14 分钟学习 · Go 1.22+
+
+[English](../en/06-cancellation.qmd) · [中文](../zh/06-cancellation.qmd)
+:::
+
+<!-- article-body -->
+
+## 截止时间发出的是信号 {#section-0}
+
+假设以后读取笔记需要调用一个很慢的远程服务。如果浏览器已经离开，继续完成那个请求可能只是浪费资源。context 可以沿着调用链传递取消信号，让每个操作知道何时应该停止。
+
+取消是协作式的。它不会强行杀死 goroutine，也不会打断任意代码。操作必须主动检查 context，或调用支持 context 的 API。把 context 传给完全忽略它的函数，并不会自动产生超时能力。
+
+从 r.Context() 开始，因为它与当前请求关联。如果某个操作需要更短的时间预算，再派生一个带超时的子 context。始终调用返回的 cancel，通常使用 defer，让相关资源及时释放。
+
+## 做一个完整的取消实验 {#section-1}
+
+把下面的完整程序保存到独立实验目录的 main.go 中，执行 go run main.go。它模拟一项需要 200 毫秒的工作，但只给 50 毫秒预算，应该输出 context deadline exceeded。
+
+select 会等待某个通道操作就绪。模拟工作结束时，定时器通道就绪；发生取消时，ctx.Done 就绪。这里通常会进入取消分支，因为时间预算更短。
+
+这个工作函数没有接触 HTTP 响应写入器，这是刻意的设计。在 HTTP 应用中，让工作函数返回结果或错误，再由处理函数决定如何响应。避免超时 goroutine 和业务 goroutine 同时写同一个响应。
+
+**Standalone experiment · main.go**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+)
+
+func work(ctx context.Context) error {
+    timer := time.NewTimer(200 * time.Millisecond)
+    defer timer.Stop()
+    select {
+    case <-timer.C:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+}
+
+func main() {
+    ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+    defer cancel()
+    fmt.Println(work(ctx))
+}
+```
+
+## 把取消信号传到真正工作的地方 {#section-2}
+
+Pocket Notes 会把 c.Request.Context() 传给仓库。内存仓库在读取或修改数据之前检查 ctx.Err()。这些操作很短，所以不需要额外的定时器。以后换成 SQL 仓库时，可以把同一个 context 传给 QueryContext 或 ExecContext。
+
+网络超时与应用取消相关，但解决的问题不同。服务器读取超时限制读取请求的时间；context 预算告诉下游工作何时停止。写超时不会自动取消处理函数内部正在执行的计算。
+
+如果客户端已经断开，就算精心构造了超时响应，写出时也可能失败。这很正常。重要的是释放资源、避免无意义的工作。因此响应辅助函数会报告写入错误，而不会假定每条响应都能送达用户。
+
+::: {.callout-tip}
+## 动手练习
+
+把 work 中的 select 换成 time.Sleep(200*time.Millisecond)，50 毫秒的 context 会打断 Sleep 吗？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+不会。Sleep 不观察 context，这正说明取消需要执行工作的操作主动配合。
+:::
+
+## 延伸阅读
+
+- [Context cancellation](https://pkg.go.dev/context)

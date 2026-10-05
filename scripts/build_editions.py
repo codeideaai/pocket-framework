@@ -1,25 +1,44 @@
-"""Create script-free, printable HTML editions from the article source."""
+"""Build complete editions and a reproducible example archive from canonical sources."""
 import json
-from html import escape
+import re
+import zipfile
 from pathlib import Path
-root=Path(__file__).resolve().parent.parent
-chapters=json.loads((root/'content/chapters.json').read_text())
-out=root/'editions';out.mkdir(exist_ok=True)
-for lang, filename in [('en','english'),('zh','chinese')]:
-    title='Pocket Framework — The complete field guide' if lang=='en' else 'Pocket Framework — 完整实践指南'
-    intro='Fourteen articles. One small Go application. Read in order, and run the examples as you go.' if lang=='en' else '14 篇文章，一个小型 Go 应用。建议按顺序阅读，边读边运行示例。'
-    def paras(text): return ''.join('<p>'+escape(p)+'</p>' for p in text.split('\n\n'))
-    html=f'''<!doctype html><html lang="{lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title><style>body{{max-width:800px;margin:50px auto;padding:0 24px;font:17px/1.9 system-ui;color:#23322e;background:#fffefa}}h1,h2,h3{{font-family:Georgia,'Songti SC',serif;line-height:1.3}}h1{{font-size:40px}}a{{color:#365c48}}article{{border-top:1px solid #ddd;margin-top:60px;padding-top:30px}}pre{{background:#edf0e8;padding:20px;overflow:auto;font:12px/1.7 monospace;white-space:pre-wrap;overflow-wrap:anywhere}}.deck{{color:#68776b;font-size:20px}}.exercise{{padding:20px;background:#f0f2e9}}.references{{font-size:13px}}@media print{{article{{break-before:page}}nav,.switch{{display:none}}body{{font-size:11pt;margin:0;max-width:none}}pre{{font-size:9pt}}}}</style><p class="switch"><a href="../index.html#/{lang}">← {'Interactive reader' if lang=='en' else '交互阅读版'}</a> · <a href="{'chinese' if lang=='en' else 'english'}.html">{'中文' if lang=='en' else 'English'}</a></p><h1>{title}</h1><p>{intro}</p><nav><ol start="0">'''
-    for c in chapters: html+=f'<li><a href="#{c["id"]}">{escape(c["title"][lang])}</a></li>'
-    html+='</ol></nav>'
-    for c in chapters:
-        html+=f'<article id="{c["id"]}"><small>{c["id"][:2]} / POCKET NOTES</small><h2>{escape(c["title"][lang])}</h2><p class="deck">{escape(c["deck"][lang])}</p>'
-        for s in c['sections']:
-            html+='<section><h3>'+escape(s['title'][lang])+'</h3>'+paras(s['body'][lang])
-            if 'code' in s: html+='<p><small>'+escape(s['filename'])+'</small></p><pre><code>'+escape(s['code'])+'</code></pre>'
-            html+='</section>'
-        e=c['exercise'];html+='<aside class="exercise"><h3>'+('Try it yourself' if lang=='en' else '动手练习')+'</h3>'+paras(e['question'][lang])+'<strong>'+('Explanation' if lang=='en' else '参考解释')+'</strong>'+paras(e['answer'][lang])+'</aside><p class="references">'
-        html+=' · '.join('<a href="'+r['url']+'">'+escape(r['label'])+'</a>' for r in c['references'])+'</p></article>'
-    html+='</html>'
-    (out/(filename+'.html')).write_text(html)
-print('Built both complete printable editions.')
+
+ROOT = Path(__file__).resolve().parent.parent
+(ROOT / 'editions').mkdir(exist_ok=True)
+for lang, name in [('en', 'english'), ('zh', 'chinese')]:
+    title = 'Pocket Framework — Complete edition' if lang == 'en' else 'Pocket Framework — 完整阅读版'
+    text = f'''---
+title: {json.dumps(title, ensure_ascii=False)}
+lang: {'en' if lang == 'en' else 'zh'}
+sidebar: {lang}
+search: false
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="english.html">
+    <meta name="pocket-chinese" content="chinese.html">
+---
+
+<!-- Generated from en/*.qmd and zh/*.qmd. Edit those source articles. -->
+
+[English](english.qmd) · [中文](chinese.qmd)
+
+'''
+    for source in sorted((ROOT / lang).glob('*.qmd')):
+        raw = source.read_text()
+        title = json.loads(re.search(r'^title: (.+)$', raw, re.M).group(1))
+        body = raw.split('<!-- article-body -->', 1)[1].strip()
+        body = re.sub(r'\{#section-(\d+)\}', lambda m: '{#' + source.stem + '-section-' + m[1] + '}', body)
+        body = re.sub(r'^## ', '### ', body, flags=re.M)
+        text += f'## {source.stem[:2]} · {title} {{#{source.stem}}}\n\n{body}\n\n'
+    (ROOT / 'editions' / (name + '.qmd')).write_text(text)
+
+(ROOT / 'assets').mkdir(exist_ok=True)
+with zipfile.ZipFile(ROOT / 'assets/pocket-notes-examples.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+    for source in sorted((ROOT / 'examples').rglob('*')):
+        if source.is_file() and source.suffix in ('.go', '.mod', '.html', '.json'):
+            info = zipfile.ZipInfo(source.relative_to(ROOT).as_posix(), (2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, source.read_bytes())
+print('Built both complete editions and the downloadable Go examples.')

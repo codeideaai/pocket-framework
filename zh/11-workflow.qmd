@@ -1,0 +1,68 @@
+---
+title: "让正确的工作流程容易重复"
+description: "组织目录、记录接口，并自动化几项真正有用的操作。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/11-workflow.html">
+    <meta name="pocket-chinese" content="../zh/11-workflow.html">
+    <meta name="pocket-chapter" content="11-workflow">
+---
+
+::: {.chapter-intro}
+11 / POCKET NOTES · 13 分钟学习 · Go 1.22+
+
+[English](../en/11-workflow.qmd) · [中文](../zh/11-workflow.qmd)
+:::
+
+<!-- article-body -->
+
+## 用目录表达职责 {#section-0}
+
+打开 examples/notebook，把文件名当成地图。main.go 负责进程启动和关闭，app.go 负责 HTTP 行为，store.go 负责笔记存储，mini/mini.go 负责可复用的 HTTP 辅助能力，app_test.go 检查这些部分共同形成的接口约定。
+
+同一目录的文件共享 package main，因此 go run . 会把它们一起编译。如果只运行 go run main.go，就会漏掉 app.go 和 store.go，出现名称未定义的错误。这是初学者常遇到的问题，与框架设计无关。
+
+随着应用扩大，可以引入 cmd/notebook 和 internal 包。但提前搬文件不一定带来改进。只有在新的包能表达清晰边界时才创建它，不必因为见过大型仓库就模仿更多目录。
+
+## 自动化已经理解的步骤 {#section-1}
+
+写代码生成器之前，先手工确定一个正确示例。生成器会放大模板的质量，也会放大错误。对于当前项目，先自动化格式化、测试和构建，已经足够实用。
+
+下面的命令在 examples/notebook 中运行。gofmt 统一源码格式，go test 验证行为，go build 生成可以直接运行的二进制。生成的二进制文件不应进入源码版本控制。
+
+文件监听器可以在修改后执行这些步骤，但必须先停止旧进程，再启动新进程。否则“address already in use”可能只是监听器遗留了旧服务。热重载是开发便利功能，与优雅发布不是一回事。
+
+**Terminal · examples/notebook**
+
+```sh
+gofmt -w main.go app.go store.go app_test.go mini/mini.go
+go test ./...
+go build -o notebook .
+```
+
+## 接口文档也要写清楚错误 {#section-2}
+
+一份 API 文档应该让读者不看实现也能调用服务。对于 POST /notes，要写明媒体类型、请求示例、201 响应、标题限制，以及 400、413、415 失败情况。还要说明当前仓库在重启后会丢失数据。
+
+仓库提供了便于阅读的 api-contract.json，它不是 OpenAPI 文档。当其他团队需要生成客户端或交互式接口浏览器时，可以把约定转换成经过验证的 OpenAPI 规范，并用测试保持同步。生成页面是否正确，取决于背后的规范是否正确。
+
+后台任务也需要独立的生命周期。如果以后添加定时清理，ticker 能触发本地任务，但启动两个服务实例就会执行两次。需要先确定重复执行是否无害，否则就需要专门的调度器和协调机制。
+
+::: {.callout-tip}
+## 动手练习
+
+为什么 go run main.go 可能失败，而 go run . 能成功？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+前者只编译指定文件，后者编译整个包，包括同目录的 app.go 和 store.go。
+:::
+
+## 延伸阅读
+
+- [Go command](https://pkg.go.dev/cmd/go)
+- [gofmt](https://pkg.go.dev/cmd/gofmt)

@@ -1,3 +1,10 @@
 .DS_Store
 examples/notebook/notebook
 __pycache__/
+_site/
+.quarto/
+editions/*.qmd
+assets/pocket-notes-examples.zip
+
+/.quarto/
+**/*.quarto_ipynb

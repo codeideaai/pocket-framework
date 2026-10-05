@@ -1,0 +1,81 @@
+---
+title: "连接浏览器，再明确访问边界"
+description: "安全地显示笔记，理解加入账户功能意味着什么。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/12-browser.html">
+    <meta name="pocket-chinese" content="../zh/12-browser.html">
+    <meta name="pocket-chapter" content="12-browser">
+---
+
+::: {.chapter-intro}
+12 / POCKET NOTES · 15 分钟学习 · Go 1.22+
+
+[English](../en/12-browser.qmd) · [中文](../zh/12-browser.qmd)
+:::
+
+<!-- article-body -->
+
+## 浏览器也是一个客户端 {#section-0}
+
+curl 帮助我们专注 HTTP。浏览器增加了用户界面，但发送的仍然是相同的 GET 和 POST 请求。配套的 browser-client.html 是一个小页面，可以读取笔记并提交新标题。
+
+要通过笔记应用提供它，把下面的可选路由加到 newApp 的 return 之前。从 examples/notebook 目录启动服务，让相对文件路径正确解析。访问 http://127.0.0.1:8080/，页面和 API 就处于同一来源，不需要额外配置跨域。
+
+这是可选扩展。核心服务器刻意只提供三个 API 路由。增加页面只是让另一个客户端看见同一份数据，不会改变笔记存储位置，也不会让它获得持久化能力。
+
+**Optional addition · inside newApp in app.go**
+
+```go
+app.Handle("GET /{$}", func(c *mini.Context) {
+    http.ServeFile(c.Writer, c.Request, "browser-client.html")
+})
+```
+
+## fetch 成功返回，不等于业务成功 {#section-1}
+
+fetch 收到 HTTP 响应后就会正常返回，即使状态码是 400 或 500。因此，把结果当成成功之前需要检查 response.ok。网络故障则会让 Promise 拒绝，所以页面也要捕获异常并显示有用的信息。
+
+显示笔记标题时使用 textContent，不要使用 innerHTML。笔记是用户提供的文字，把它解释成 HTML，会改变它的含义并带来风险。示例页面会创建列表元素，再赋值文本内容。
+
+保存时，表单暂时禁用提交按钮；写入成功后才刷新列表。这能避免同一页面上的误双击，但并不等于服务器已经能处理所有重复请求。可靠重试需要明确的幂等设计。
+
+**browser-client.html · rendering pattern**
+
+```js
+const response = await fetch('/notes');
+if (!response.ok) throw new Error(`HTTP ${response.status}`);
+const notes = await response.json();
+for (const note of notes) {
+    const item = document.createElement('li');
+    item.textContent = note.title;
+    list.append(item);
+}
+```
+
+## 账户功能会改变数据模型 {#section-2}
+
+本地笔记程序没有账户。表单能使用，并不代表服务已经有访问控制。如果加入用户，每条笔记都需要归属者，读取和写入都必须限定在已认证用户的范围内。在浏览器里隐藏按钮并不能执行这个规则。
+
+身份认证回答“请求者是谁”，授权回答“这个人能否访问这条笔记”。会话 Cookie 可以帮助解决前一个问题，但后一个问题仍然需要在仓库查询中限制归属。不能因为客户端传来了 owner ID，就相信它。
+
+扩展账户功能时，应使用成熟的认证组件、适合密码的哈希算法、有过期时间的会话、合适的 Cookie 安全属性，以及针对 Cookie 认证写操作的 CSRF 策略。这些不属于当前本地示例已实现的功能。向其他用户开放私人笔记之前，应先补齐相应失败场景的测试。
+
+::: {.callout-tip}
+## 动手练习
+
+用户把请求中的笔记 7 改成笔记 8，应该在哪里检查归属？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+在服务器端，用已认证身份进行限定归属的查询或服务检查。浏览器控件不能承担授权。
+:::
+
+## 延伸阅读
+
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch)
+- [textContent](https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent)

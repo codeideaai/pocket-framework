@@ -1,0 +1,55 @@
+name: Publish Quarto tutorial
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Verify hello example
+        working-directory: examples/hello
+        run: go test ./...
+      - name: Verify notebook and concurrency
+        working-directory: examples/notebook
+        run: go test -race ./...
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: '1.10.18'
+      - name: Render bilingual website
+        run: |
+          python3 scripts/build_editions.py
+          quarto render
+      - name: Verify rendered local links
+        run: python3 scripts/check_site.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    if: github.event.repository.private == false
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment

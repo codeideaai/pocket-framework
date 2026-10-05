@@ -1,0 +1,88 @@
+---
+title: "Stop work nobody needs anymore"
+description: "Use cooperative cancellation without racing the response writer."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/06-cancellation.html">
+    <meta name="pocket-chinese" content="../zh/06-cancellation.html">
+    <meta name="pocket-chapter" content="06-cancellation">
+---
+
+::: {.chapter-intro}
+06 / POCKET NOTES · 14 min lesson · Go 1.22+
+
+[English](../en/06-cancellation.qmd) · [中文](../zh/06-cancellation.qmd)
+:::
+
+<!-- article-body -->
+
+## A deadline is a signal {#section-0}
+
+Imagine that loading a note eventually requires a slow remote service. If the browser goes away, finishing that remote request may be wasted work. A context carries a cancellation signal through the call chain so each operation can notice when it should stop.
+
+Cancellation is cooperative. It does not forcibly kill a goroutine or interrupt arbitrary code. An operation must check the context or call an API that understands it. Passing a context to a function that ignores it does not create a timeout.
+
+Start from r.Context(), because it is tied to the incoming request. Derive a child with a shorter timeout when a particular operation needs a tighter budget. Always call the returned cancel function, usually with defer, so resources can be released promptly.
+
+## A complete cancellation experiment {#section-1}
+
+Save the following program as main.go in a separate scratch directory and run go run main.go. It simulates work that would take 200 milliseconds but gives it a 50-millisecond budget. It should print context deadline exceeded.
+
+select waits until one channel operation is ready. The timer channel becomes ready when the simulated work finishes. ctx.Done becomes ready when cancellation happens. Here the cancellation branch normally wins because its budget is shorter.
+
+There is no HTTP response writer in this worker. That is deliberate. In an HTTP application, let work return a result or an error, and let the handler decide the response. Avoid designs where a timeout goroutine and a worker both write to the same response.
+
+**Standalone experiment · main.go**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+)
+
+func work(ctx context.Context) error {
+    timer := time.NewTimer(200 * time.Millisecond)
+    defer timer.Stop()
+    select {
+    case <-timer.C:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+}
+
+func main() {
+    ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+    defer cancel()
+    fmt.Println(work(ctx))
+}
+```
+
+## Follow cancellation through the application {#section-2}
+
+Pocket Notes passes c.Request.Context() into its store. The memory store checks ctx.Err() before reading or changing its data. Its tiny operations finish quickly, so it does not need a timer of its own. A future SQL store can use QueryContext or ExecContext with that same context.
+
+Network deadlines and application cancellation solve related but different problems. A server read timeout limits reading a request. A context budget tells downstream work when to stop. A write timeout does not magically cancel CPU work inside your handler.
+
+When a client has disconnected, writing a beautifully formatted timeout response may itself fail. That is normal. The important part is releasing resources and avoiding unnecessary work. This is why our response helper reports write errors rather than promising every response will reach a user.
+
+::: {.callout-tip}
+## Try it yourself
+
+Replace the select in work with time.Sleep(200*time.Millisecond). Does the 50-millisecond context interrupt the sleep?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+No. Sleep does not observe the context. The example demonstrates why cancellation must be supported by the operation doing the work.
+:::
+
+## Further reading
+
+- [Context cancellation](https://pkg.go.dev/context)

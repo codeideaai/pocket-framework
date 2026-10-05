@@ -1,0 +1,88 @@
+---
+title: "Start clearly. Stop cleanly."
+description: "Make configuration, logs, and shutdown part of the application."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/09-lifecycle.html">
+    <meta name="pocket-chinese" content="../zh/09-lifecycle.html">
+    <meta name="pocket-chapter" content="09-lifecycle">
+---
+
+::: {.chapter-intro}
+09 / POCKET NOTES · 16 min lesson · Go 1.22+
+
+[English](../en/09-lifecycle.qmd) · [中文](../zh/09-lifecycle.qmd)
+:::
+
+<!-- article-body -->
+
+## Configuration is input at startup {#section-0}
+
+Hardcoding port 8080 is fine until you want two local servers. The notebook program accepts an address in three levels of precedence: a default of 127.0.0.1:8080, then NOTE_ADDR from the environment, then the -addr command-line flag.
+
+The program calls net.Listen before reporting that it is listening. That is a small but important truthfulness rule: a log should describe something that actually happened. An invalid address or occupied port fails immediately instead of leaving a half-started service.
+
+Use configuration for things that vary between environments, not for every internal constant. The memory store’s title rule belongs to the API contract. A listen address belongs to the environment. Mixing those two kinds of choices makes configuration difficult to understand.
+
+**Terminal · examples/notebook · run one command at a time**
+
+```sh
+go run . -addr 127.0.0.1:9090
+# Or set the environment for this one command:
+NOTE_ADDR=127.0.0.1:9090 go run .
+```
+
+## Shutdown must finish before main returns {#section-1}
+
+When the process receives an interrupt or SIGTERM, it should stop accepting new work and give active requests a brief opportunity to finish. Server.Shutdown does that for ordinary HTTP connections. It does not automatically manage every background task or hijacked connection.
+
+The shutdown budget must come from a fresh context. The signal context is already canceled, so using it directly would cancel the shutdown wait immediately. Our program creates a new five-second budget, waits for Shutdown, and closes remaining connections if that budget is exceeded.
+
+The complete main.go also waits for the serving goroutine and treats http.ErrServerClosed as normal. Returning from main too early would terminate the process while shutdown was still running. Build a binary when testing signals so the process you interrupt is the server itself.
+
+**examples/notebook/main.go · excerpt inside run**
+
+```go
+ctx, release := context.WithTimeout(context.Background(), 5*time.Second)
+defer release()
+if err := server.Shutdown(ctx); err != nil {
+    _ = server.Close()
+    return fmt.Errorf("shutdown: %w", err)
+}
+```
+
+## Make logs answer practical questions {#section-2}
+
+slog writes structured JSON logs containing a message and named fields. Our startup log records the actual address; request logs record method, path, and duration. Keeping fields separate lets a log viewer filter by path without parsing a sentence.
+
+Build and run the program below. Make a request from another terminal, then press Control+C in the server terminal. A normal shutdown should exit without a “server stopped” error. Start two copies on the same address and the second should fail promptly with a bind error.
+
+A health endpoint currently says only that the process can serve a response. If you add a database, decide whether you also need a separate readiness check. Being alive and being ready to serve useful traffic are different questions.
+
+**Terminal · examples/notebook**
+
+```sh
+go build -o notebook .
+./notebook -addr 127.0.0.1:8080
+# Press Control+C to stop.
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+Why not call Shutdown with the context returned by signal.NotifyContext after its Done channel fires?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+It is already canceled. A fresh context gives shutdown its own bounded period to drain active requests.
+:::
+
+## Further reading
+
+- [Server.Shutdown](https://pkg.go.dev/net/http#Server.Shutdown)
+- [Structured logging](https://pkg.go.dev/log/slog)
+- [Signal contexts](https://pkg.go.dev/os/signal#NotifyContext)

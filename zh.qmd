@@ -1,0 +1,58 @@
+---
+title: "一步一步，写出自己的框架。"
+lang: zh
+sidebar: zh
+toc: false
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="index.html">
+    <meta name="pocket-chinese" content="zh.html">
+---
+
+::: {.lead}
+14 篇动手实践文章，一个小型 Go 笔记服务。从第一个请求开始，最后做出一个自己能解释清楚的框架。
+:::
+
+[English](index.qmd) · [中文](zh.qmd)
+
+[开始学习 →](zh/00-start.qmd){.btn .btn-primary}
+
+## 你会做出什么
+
+Pocket Notes 接收标题，将笔记保存在内存中，并返回笔记列表。沿途学习路由、JSON 封装、校验、中间件、取消机制、存储接口和测试。
+
+::: {.callout-note}
+核心示例要求 Go 1.22+，仅使用标准库。数据库、缓存和账户功能明确标记为扩展设计。配套应用中的笔记会在重启后清空。
+:::
+
+## 建立连接
+
+- [00 · 从一个小项目开始](zh/00-start.qmd) — 准备开发环境，认识必要的 Go 语法，明确我们要做什么。
+- [01 · 跟着一次请求走完全程](zh/01-request.qmd) — 先看懂浏览器与服务器的对话，再考虑抽象。
+- [02 · 给每项操作一个地址](zh/02-routing.qmd) — 设计笔记接口，把路由器封装成一个小引擎。
+- [03 · 让响应简单、一致](zh/03-response.qmd) — 封装单次请求，写一个小巧的 JSON 响应方法。
+
+## 实现核心
+
+- [04 · 输入需要验证，不能直接相信](zh/04-input.qmd) — 只接收一个小 JSON 对象，清楚地处理错误。
+- [05 · 给处理函数增加公共行为](zh/05-middleware.qmd) — 用中间件记录耗时，理解执行顺序。
+- [06 · 停止已经没有必要的工作](zh/06-cancellation.qmd) — 通过协作式取消停止工作，避免并发写响应。
+- [07 · 给数据一个合适的位置](zh/07-storage.qmd) — 把笔记存储与 HTTP 分开，并处理并发请求。
+
+## 让行为可靠
+
+- [08 · 把预期变成自动测试](zh/08-tests.qmd) — 不用监听端口，也不用点浏览器，就能检查接口。
+- [09 · 清楚地启动，妥善地停止](zh/09-lifecycle.qmd) — 让配置、日志和关闭流程成为应用的一部分。
+- [10 · 让数据在重启之后仍然存在](zh/10-persistence.qmd) — 设计数据库适配层，再判断是否需要缓存。
+- [11 · 让正确的工作流程容易重复](zh/11-workflow.qmd) — 组织目录、记录接口，并自动化几项真正有用的操作。
+
+## 串成完整应用
+
+- [12 · 连接浏览器，再明确访问边界](zh/12-browser.qmd) — 安全地显示笔记，理解加入账户功能意味着什么。
+- [13 · 交付一个自己理解的小作品](zh/13-finish.qmd) — 运行完整项目，检查能力边界，规划下一次迭代。
+
+## 阅读与实践
+
+- [完整打印版](editions/chinese.qmd)
+- [下载配套示例](assets/pocket-notes-examples.zip)
+- [GitHub](https://github.com/codeideaai/pocket-framework)

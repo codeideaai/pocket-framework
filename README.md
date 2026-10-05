@@ -1,67 +1,73 @@
 # Pocket Framework
 
-An original, beginner-friendly series about building a small Go web framework through a personal notebook service. Fourteen complete articles, with English and Chinese versions of every article, exercise, and answer.
+[English website](https://codeideaai.github.io/pocket-framework/) · [中文网站](https://codeideaai.github.io/pocket-framework/zh.html)
 
-## Read
+Fourteen original, beginner-friendly articles about building a small Go web framework through a personal notebook service. Every article includes an English and Chinese edition, practical examples, an exercise, and an explanation.
 
-Open `index.html` directly in a browser. No installation or network connection is required for the reader. English is the default; the language buttons preserve the current chapter and approximate reading position.
+## Read and edit
 
-For a localhost preview, run this from the repository root:
+This is a **Quarto website**, using the same Quarto version and light/dark themes as Spring from Scratch.
+
+- `index.qmd`: English landing page (default).
+- `zh.qmd`: Chinese landing page.
+- `en/*.qmd` and `zh/*.qmd`: the 28 editable article sources.
+- `_quarto.yml`: navigation, search, theme, and publishing configuration.
+- `examples/`: complete Go programs and tests.
+
+Language links preserve the chapter. Quarto provides search, a table of contents, previous/next navigation, code copying, and light/dark mode. Read markers are saved locally in the browser. No JavaScript is required to read article text or follow the in-article language links.
+
+Install [Quarto](https://quarto.org/docs/get-started/), then:
 
 ```sh
-python3 -m http.server 4173 --bind 127.0.0.1
+quarto preview
 ```
 
-Visit `http://127.0.0.1:4173`. Search titles and article text with the sidebar. Press `/` to focus search and Escape to clear it. Mark completed articles to save progress in the current browser. Browser settings can prevent persistent storage; reading still works.
+To produce the complete website:
 
-The `editions/english.html` and `editions/chinese.html` files contain the full series without JavaScript and are suitable for browser printing.
+```sh
+quarto render
+python3 scripts/check_site.py
+```
 
-## Run the Go examples
+The output is `_site/`. The pre-render script automatically assembles both complete printable editions and the downloadable example archive. Those generated files are ignored by Git; edit the `.qmd` articles directly. The original HTML reader remains recoverable in the initial Git commit.
 
-Install Go 1.22 or later; use a currently supported release for development. Commands in the series use a macOS/Linux shell; Windows users can use WSL.
+For a static local preview of rendered output:
+
+```sh
+python3 -m http.server 4174 --bind 127.0.0.1 --directory _site
+```
+
+## Go examples
+
+Use Go 1.22 or later; choose a currently supported Go release for development. Commands use a macOS/Linux shell; Windows users can use WSL.
 
 ```sh
 cd examples/hello
 go run .
 ```
 
-Stop the first example with Control+C before starting the notebook service:
+Stop it with Control+C before starting the notebook:
 
 ```sh
 cd ../notebook
-go test ./...
 go test -race ./...
 go run .
 ```
 
-The notebook listens on `127.0.0.1:8080`. Use `-addr` or the `NOTE_ADDR` environment variable to select another address. Flags take precedence over the environment.
+The server defaults to `127.0.0.1:8080`. Set `NOTE_ADDR` or pass `-addr` to choose another address. Routes: `GET /health`, `GET /notes`, and `POST /notes` with JSON `{"title":"Learn Go"}`.
 
-- `GET /health`: process health.
-- `GET /notes`: list notes.
-- `POST /notes`: create a note with `Content-Type: application/json` and `{"title":"Learn Go"}`.
+This is a local teaching application. Data is stored in memory and disappears at process exit. Database, cache, and accounts are extension designs, not implemented features of the example.
 
-This is a local learning application. Notes exist only in memory and disappear when the process exits. Database, cache, and account features are extension designs in the articles, not implemented features of the example. The optional browser client is explained in article 12.
+## GitHub Pages
 
-## Edit the series
+`.github/workflows/publish.yml` tests the Go examples, renders with Quarto 1.10.18, validates output links, and uploads the Pages artifact. For a public repository, it also deploys through GitHub Actions. Choose **Settings → Pages → Source → GitHub Actions** to enable publishing. While the repository is private, the workflow builds and validates without deploying.
 
-The authoring source is `scripts/write_content.py`. Each article contains English and Chinese fields, a shared code example where appropriate, an exercise, an answer, and official documentation links.
-
-After editing:
-
-```sh
-python3 scripts/write_content.py
-python3 scripts/build_editions.py
-node --check app.js
-```
-
-The first script writes `content/chapters.json` and its browser-compatible counterpart `content/chapters.js`. The second writes both complete printable HTML editions. Edit the authoring source rather than the generated files.
-
-The reader uses plain HTML, CSS, and JavaScript with no external assets, package dependencies, or tracking. The Go examples use only the standard library.
+The intended site address is `https://codeideaai.github.io/pocket-framework/`. It becomes available after Pages is enabled and the deployment succeeds.
 
 ## 中文说明
 
-直接用浏览器打开 `index.html`，即可离线阅读。页面默认英文，右上角可切换完整中文版。支持正文搜索、章节导航、代码复制、阅读进度和打印。
+本项目已迁移为 Quarto，与 Spring from Scratch 使用相同版本和明暗主题。默认英文，支持切换到当前章节的中文版。
 
-共 14 篇原创文章，以个人笔记服务为贯穿项目；每篇都有解释、示例、练习与答案。`editions/chinese.html` 是不依赖 JavaScript 的中文完整版。
+直接编辑 `en/` 与 `zh/` 下的 `.qmd` 正文，运行 `quarto preview` 预览或 `quarto render` 构建。完整打印版和示例下载包会自动生成，不需要维护第二份正文。
 
-核心 Go 示例位于 `examples`；先安装 Go，再按文章运行。数据库、缓存和账户内容明确标记为后续扩展，不应误认为当前示例已经实现。
+GitHub Actions 会先验证 Go 示例，再构建和检查网站。仓库仍为私有时只构建、不部署；公开后可通过 GitHub Pages 发布。

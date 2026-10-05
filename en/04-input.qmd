@@ -1,0 +1,79 @@
+---
+title: "Treat input as a question, not a fact"
+description: "Accept one small JSON object and reject mistakes clearly."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/04-input.html">
+    <meta name="pocket-chinese" content="../zh/04-input.html">
+    <meta name="pocket-chapter" content="04-input">
+---
+
+::: {.chapter-intro}
+04 / POCKET NOTES · 15 min lesson · Go 1.22+
+
+[English](../en/04-input.qmd) · [中文](../zh/04-input.qmd)
+:::
+
+<!-- article-body -->
+
+## Successful parsing is only the first check {#section-0}
+
+A client wants to create a note by sending {"title":"Learn Go"}. There are several independent questions to answer. Is the body JSON? Is it small enough? Does it contain exactly one value? Are its fields expected? Is the title useful? Solving only the first question is not input validation.
+
+Our contract accepts application/json, limits the body to 4096 bytes, rejects unknown fields, and trims whitespace from the title. After trimming, the title must contain between 1 and 120 Unicode code points. Code points are not always the same as visible characters: an emoji sequence may contain several.
+
+We use 415 for an unsupported media type, 413 when the decoder encounters the size limit, and 400 for invalid content. If the decoder finds an earlier syntax error before reaching the limit, a large malformed request can still get 400. The practical promise is that invalid input never becomes a saved note.
+
+## Decode once, then check for the end {#section-1}
+
+A JSON decoder reads one value at a time. A first successful Decode does not prove that the body contains nothing else. A second decode must reach io.EOF. Otherwise, a body like {"title":"a"} {} would silently include an extra value.
+
+The implementation also uses MaxBytesReader before decoding. Checking Content-Length alone is insufficient because it can be absent, and the application must limit the bytes it actually reads. DisallowUnknownFields helps catch a typo such as titel instead of title.
+
+After decoding, trim and validate the title before calling the store. Keep decoding, validation, and persistence in that order. The excerpt below shows the happy-path structure; app.go contains the full error branches and media-type check.
+
+**examples/notebook/app.go · setup excerpt**
+
+```go
+c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+var input struct { Title string `json:"title"` }
+dec := json.NewDecoder(c.Request.Body)
+dec.DisallowUnknownFields()
+// Check the first Decode error, then require io.EOF on the second.
+// See app.go for all error branches.
+```
+
+## Prove the failure cases too {#section-2}
+
+Run these requests against the notebook server. The first should return 201 and a note with an ID. The second should return 400 because spaces are not a meaningful title. GET /notes should show only the successful note, not an empty placeholder left behind by the rejected request.
+
+Try a misspelled field and a second JSON object next. Both should fail. If a request unexpectedly returns 415, check the Content-Type header; curl does not infer application/json just because its data looks like JSON.
+
+This exercise reveals a general design rule: validate before changing state. Error handling is much simpler when rejecting input does not require undoing a half-completed write.
+
+**Second terminal**
+
+```sh
+curl -i http://127.0.0.1:8080/notes   -H 'Content-Type: application/json'   -d '{"title":"Learn Go"}'
+curl -i http://127.0.0.1:8080/notes   -H 'Content-Type: application/json'   -d '{"title":"   "}'
+curl http://127.0.0.1:8080/notes
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+Why does len(title) give the wrong unit for our title rule?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+For a Go string, len counts bytes. utf8.RuneCountInString counts Unicode code points, which is the unit our contract explicitly chose.
+:::
+
+## Further reading
+
+- [Decoder](https://pkg.go.dev/encoding/json#Decoder)
+- [MaxBytesReader](https://pkg.go.dev/net/http#MaxBytesReader)

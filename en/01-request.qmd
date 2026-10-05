@@ -1,0 +1,87 @@
+---
+title: "Follow one request all the way home"
+description: "Understand the conversation before adding abstractions."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/01-request.html">
+    <meta name="pocket-chinese" content="../zh/01-request.html">
+    <meta name="pocket-chapter" content="01-request">
+---
+
+::: {.chapter-intro}
+01 / POCKET NOTES · 12 min lesson · Go 1.22+
+
+[English](../en/01-request.qmd) · [中文](../zh/01-request.qmd)
+:::
+
+<!-- article-body -->
+
+## A request is a message {#section-0}
+
+Type http://127.0.0.1:8080 into a browser. The browser connects to a server on your own machine and asks for a resource. Here 127.0.0.1 means this computer, 8080 identifies the listening port, and / is the path. The browser normally uses GET when opening a page.
+
+The response has a status code, headers, and usually a body. A 200 status says the request succeeded. A Content-Type header tells the reader how to interpret the body. The greeting itself is the body. HTTP bodies can contain bytes of many kinds, including images; HTTP is not limited to plain text.
+
+Keep the roles separate: the server accepts connections, a router selects a handler, and the handler performs one piece of work. A framework helps organize these roles. It does not replace the HTTP protocol.
+
+## Your first complete server {#section-1}
+
+Read main.go in examples/hello from top to bottom. NewServeMux creates the router. HandleFunc connects a pattern to a function. The pattern GET /{$} means the root path for GET requests; the {$} marker keeps it from becoming a catch-all for deeper paths. Go also lets a GET pattern handle HEAD requests.
+
+Inside the handler, r is the incoming request and w is where the response is written. Fprintln writes our greeting. Since the handler has not selected another status, writing the body sends the default success status. The Server value supplies the address, router, and a limit for reading request headers.
+
+ListenAndServe blocks while the server runs. Its returned error matters: a port conflict prevents startup. The first example logs that error and exits. Later we will distinguish a normal shutdown from an unexpected failure.
+
+**examples/hello/main.go · complete file**
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+)
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Hello, framework!")
+	})
+	server := &http.Server{Addr: "127.0.0.1:8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	log.Println("Open http://127.0.0.1:8080")
+	log.Fatal(server.ListenAndServe())
+}
+```
+
+## Inspect what the browser hides {#section-2}
+
+Leave the server running and open a second terminal. curl is a command-line HTTP client. The -i option includes response headers. You should see a 200 status and Hello, framework! in the body. Header order, dates, and the displayed HTTP version can vary, so compare meaning rather than copying every line.
+
+Now request /missing. The router should return 404. This is useful evidence: the server is reachable, but no route matched. “Connection refused” is different; it usually means nothing is listening at that address. Debug from the outside inward: connection, route, then handler.
+
+**Second terminal**
+
+```sh
+curl -i http://127.0.0.1:8080/
+curl -i http://127.0.0.1:8080/missing
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+What would change if the server listened on 127.0.0.1:9090?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+Use port 9090 in the browser and curl URL too. A correct path on the wrong port still reaches the wrong destination.
+:::
+
+## Further reading
+
+- [HTTP server API](https://pkg.go.dev/net/http#Server)

@@ -1,0 +1,85 @@
+---
+title: "给处理函数增加公共行为"
+description: "用中间件记录耗时，理解执行顺序。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/05-middleware.html">
+    <meta name="pocket-chinese" content="../zh/05-middleware.html">
+    <meta name="pocket-chapter" content="05-middleware">
+---
+
+::: {.chapter-intro}
+05 / POCKET NOTES · 12 分钟学习 · Go 1.22+
+
+[English](../en/05-middleware.qmd) · [中文](../zh/05-middleware.qmd)
+:::
+
+<!-- article-body -->
+
+## 一份公共逻辑，作用于多个路由 {#section-0}
+
+假设每次请求都需要记录耗时。可以把计时代码复制进三个处理函数，但新增第四个时很容易忘记。这样的公共行为应该放在整个应用处理函数的外围。
+
+中间件接收一个 http.Handler，再返回另一个 http.Handler。新处理函数可以在调用原处理函数之前和之后做事。访问日志中间件记录开始时间，调用 next.ServeHTTP，再记录经过的时间。笔记处理函数仍只负责笔记业务。
+
+这里测量的是下游处理函数调用的耗时，不是用户通过网络接收完整响应所花的时间，也没有记录状态码。明确指标到底测量什么，日志才有意义。
+
+## 从内到外理解函数嵌套 {#section-1}
+
+最里面的函数处理一次请求。包住它的函数接收 next，也就是它应该调用的下游处理函数。最外层 accessLog 接收日志对象。这种写法在启动时保存日志依赖，随后可以服务很多请求。
+
+调用 next 会把控制权交给里面的处理逻辑，next 返回后又回到中间件。如果中间件决定拒绝请求，可以写出错误并直接返回，不再调用 next。身份认证经常采用这种结构。
+
+不要仅仅为了“异步”就额外启动 goroutine。ResponseWriter 有请求生命周期，并发写响应会带来正确性问题。这里同步地包装处理函数已经足够。
+
+**examples/notebook/app.go · excerpt**
+
+```go
+func accessLog(logger *slog.Logger) mini.Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            start := time.Now()
+            next.ServeHTTP(w, r)
+            logger.Info("request", "method", r.Method,
+                "path", r.URL.Path, "duration", time.Since(start))
+        })
+    }
+}
+```
+
+## 顺序也是行为的一部分 {#section-2}
+
+Chain(app, A, B) 应先进入 A，再进入 B，最后进入 app，然后依次返回 B 和 A。所以组合函数需要从列表末尾向前包装。把它写成 A(B(app))，就更容易看清。
+
+可以临时给两个中间件增加 before 和 after 日志，先在纸上预测输出，再运行验证。如果授权层提前返回，它里面的逻辑不会执行；放在外层的日志中间件仍然可以记录被拒绝的请求。
+
+我们的日志记录路径，但不记录请求体和凭据。更多细节不一定更好：日志里一旦出现密码，就多了一个需要保护密码的地方。
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+func Chain(handler http.Handler, middleware ...Middleware) http.Handler {
+    for i := len(middleware)-1; i >= 0; i-- {
+        handler = middleware[i](handler)
+    }
+    return handler
+}
+```
+
+::: {.callout-tip}
+## 动手练习
+
+对于 A(B(app))，正常的 before/after 顺序是什么？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+A before → B before → app → B after → A after。提前返回可能让内部阶段不再执行。
+:::
+
+## 延伸阅读
+
+- [Handler interface](https://pkg.go.dev/net/http#Handler)

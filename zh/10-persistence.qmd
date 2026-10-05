@@ -1,0 +1,74 @@
+---
+title: "让数据在重启之后仍然存在"
+description: "设计数据库适配层，再判断是否需要缓存。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/10-persistence.html">
+    <meta name="pocket-chinese" content="../zh/10-persistence.html">
+    <meta name="pocket-chapter" content="10-persistence">
+---
+
+::: {.chapter-intro}
+10 / POCKET NOTES · 16 分钟学习 · Go 1.22+
+
+[English](../en/10-persistence.qmd) · [中文](../zh/10-persistence.qmd)
+:::
+
+<!-- article-body -->
+
+## 替换仓库，保留接口约定 {#section-0}
+
+内存仓库让我们不必安装基础设施，就能学会 API。它接下来的限制是无法持久保存。实现一个 SQL 版 NoteStore 后，处理函数仍然调用 List 和 Create，笔记却能在重启之后保留。
+
+本篇是扩展设计，不代表配套服务器已经连接数据库。实现时，需要选择数据库和驱动，创建包含自动生成整数主键与必填标题的 notes 表，再编写持有共享 *sql.DB 的 SQLStore。这个值管理的是连接池，并不是每次请求都应新建的单条连接。
+
+启动时创建连接池，用 PingContext 检查连通性，注入仓库；请求关闭完成后，再关闭连接池。表结构迁移应使用明确、有版本的步骤。迁移属于运维变更，不应该由每次请求顺便执行。
+
+## 通过参数传递数据 {#section-1}
+
+SQL 与用户输入必须分开。下面是 PostgreSQL 风格的示意：$1 是参数占位符，title 作为独立参数传入。其他驱动可能使用不同的占位符。即使当前标题校验看起来很严格，也不要改成拼接 SQL 字符串。
+
+Create 应返回实际生成的编号，让客户端能识别保存的笔记。如果一次业务操作要修改多条相关记录，就把数据库操作放在事务里，并处理提交错误。事务能组织数据库变更，但不能自动把发邮件或调用其他服务也变成同一项原子操作。
+
+List 应定义排序方式，并最终支持分页。没有 ORDER BY，SQL 结果不承诺稳定顺序。除了用内存仓库测试处理函数，还需要用真实测试数据库验证 SQL 实现。
+
+**Design excerpt · not part of the runnable memory example**
+
+```go
+// Design excerpt: requires a configured PostgreSQL driver,
+// an existing notes table, db *sql.DB, ctx, and title.
+var id int
+err := db.QueryRowContext(ctx,
+    "INSERT INTO notes (title) VALUES ($1) RETURNING id",
+    title,
+).Scan(&id)
+// Check err before returning Note{ID: id, Title: title}.
+```
+
+## 缓存会引入新鲜度问题 {#section-2}
+
+不要因为有了数据库，就顺手添加缓存。先测量一个确实缓慢、重复发生的读取。缓存能暂存结果，但每次写入都会带来一个问题：旧的缓存结果怎么办？
+
+对于小型笔记列表，可以先考虑短时间缓存 GET 结果，并在 Create 成功后删除列表缓存键。即使这样仍有竞争：读请求可能在写入前取到旧数据，却在缓存删除后才把旧结果重新放回。过期时间能限制陈旧数据存在多久，但不保证完全一致。
+
+选择 Redis 或其他缓存库之前，先明确允许多长的数据延迟。数据库仍然是持久数据来源。缓存不可用时，要决定能否回退数据库，以及回退会不会压垮数据库。这些是行为设计，不只是连接参数。
+
+::: {.callout-tip}
+## 动手练习
+
+笔记已提交到数据库，但更新缓存失败。客户端应该直接重试创建吗？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+不应该。创建已经发生，无保护重试可能产生重复数据。应区分持久写入结果与缓存维护结果，并设计重试或幂等行为。
+:::
+
+## 延伸阅读
+
+- [Database access](https://go.dev/doc/database/)
+- [SQL parameters](https://go.dev/doc/database/sql-injection)
+- [Managing connections](https://go.dev/doc/database/manage-connections)

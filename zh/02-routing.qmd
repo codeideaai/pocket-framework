@@ -1,0 +1,79 @@
+---
+title: "给每项操作一个地址"
+description: "设计笔记接口，把路由器封装成一个小引擎。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/02-routing.html">
+    <meta name="pocket-chinese" content="../zh/02-routing.html">
+    <meta name="pocket-chapter" content="02-routing">
+---
+
+::: {.chapter-intro}
+02 / POCKET NOTES · 12 分钟学习 · Go 1.22+
+
+[English](../en/02-routing.qmd) · [中文](../zh/02-routing.qmd)
+:::
+
+<!-- article-body -->
+
+## 先确定资源，再确定操作 {#section-0}
+
+笔记就是我们的资源。读取笔记集合使用 GET /notes，创建笔记使用 POST /notes。路径说明我们操作什么，请求方法说明准备做哪类操作。保持这些约定一致，客户端和测试代码都会更容易编写。
+
+目前只需要三个路由：GET /health 检查进程能否响应，GET /notes 读取笔记，POST /notes 创建笔记。暂时不做修改和删除。一个小而完整的功能边界，比一堆尚未完成的接口更容易理解。
+
+404 与 405 表达的含义不同。找不到路径时返回 404，路径存在但不支持这个方法时返回 405。我们让 ServeMux 负责区分这些情况，包括设置 Allow 响应头，不再另写一套行为略有不同的路由系统。
+
+## 引擎可以从简单封装开始 {#section-1}
+
+mini 包中的 Engine 保存一个 ServeMux。它的 ServeHTTP 方法把请求交给这个路由器。只要提供这个方法，Engine 就满足 http.Handler 接口，标准服务器可以直接使用它。Go 通过方法判断是否满足接口，不需要声明 implements。
+
+为什么还要加这一层？它让应用有一个统一的框架路由注册入口，也为后续公共行为提供位置。这不是路由性能优化，而是建立一个小型 API 边界，同时保留现有路由器的行为。
+
+下面是 mini.go 中的片段，不是独立程序。它需要 package mini、net/http 导入，以及下一篇介绍的 Handle 方法。示例目录已经提供了完整文件。
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Engine struct { mux *http.ServeMux }
+
+func New() *Engine {
+    return &Engine{mux: http.NewServeMux()}
+}
+
+func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    e.mux.ServeHTTP(w, r)
+}
+```
+
+## 扩展功能前，先验证约定 {#section-2}
+
+停止 hello 服务器，再从 examples/notebook 目录运行 go run .。在另一个终端执行下面的请求。应用刚启动时，GET /notes 返回空 JSON 数组，DELETE /notes 返回 405，GET /missing 返回 404。
+
+应在服务器启动前注册路由。重复或冲突的规则可能在注册时触发 panic，这是应该修正的启动配置错误。如果以后增加 GET /notes/{id}，可以通过 r.PathValue("id") 读取路径参数，再验证它是不是合法整数。路由能匹配到字符串，并不代表它一定是有效的记录编号。
+
+**Second terminal**
+
+```sh
+curl -i http://127.0.0.1:8080/notes
+curl -i -X DELETE http://127.0.0.1:8080/notes
+curl -i http://127.0.0.1:8080/missing
+```
+
+::: {.callout-tip}
+## 动手练习
+
+GET /notes 是否应该顺便创建一条笔记？为什么？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+不应该。读取操作不应主动改变应用状态。浏览器、爬虫和客户端可能重复读取；创建应由 POST 路由承担。
+:::
+
+## 延伸阅读
+
+- [ServeMux patterns](https://pkg.go.dev/net/http#ServeMux)

@@ -1,0 +1,144 @@
+project:
+  type: website
+  output-dir: _site
+  pre-render:
+    - python3 scripts/build_editions.py
+  render:
+    - index.qmd
+    - zh.qmd
+    - en/*.qmd
+    - zh/*.qmd
+    - editions/*.qmd
+  resources:
+    - assets/pocket-notes-examples.zip
+    - assets/reader.js
+website:
+  title: "Pocket Framework"
+  description: "Build a small Go web framework through a personal notebook service. English and Chinese."
+  site-url: "https://codeideaai.github.io/pocket-framework/"
+  repo-url: "https://github.com/codeideaai/pocket-framework"
+  page-navigation: true
+  back-to-top-navigation: true
+  search:
+    location: navbar
+    type: overlay
+  navbar:
+    left:
+      - text: "English"
+        href: index.qmd
+      - text: "中文"
+        href: zh.qmd
+    right:
+      - icon: github
+        href: "https://github.com/codeideaai/pocket-framework"
+  sidebar:
+    - id: en
+      title: "Learning path"
+      style: docked
+      contents:
+        - href: index.qmd
+          text: "Overview"
+        - section: "First connections"
+          contents:
+            - href: en/00-start.qmd
+              text: "00 A small project, a clear destination"
+            - href: en/01-request.qmd
+              text: "01 Follow one request all the way home"
+            - href: en/02-routing.qmd
+              text: "02 Give each action an address"
+            - href: en/03-response.qmd
+              text: "03 Make responses boring and consistent"
+        - section: "A useful core"
+          contents:
+            - href: en/04-input.qmd
+              text: "04 Treat input as a question, not a fact"
+            - href: en/05-middleware.qmd
+              text: "05 Wrap a handler without changing its job"
+            - href: en/06-cancellation.qmd
+              text: "06 Stop work nobody needs anymore"
+            - href: en/07-storage.qmd
+              text: "07 Give your data a home"
+        - section: "Make it dependable"
+          contents:
+            - href: en/08-tests.qmd
+              text: "08 Turn expectations into tests"
+            - href: en/09-lifecycle.qmd
+              text: "09 Start clearly. Stop cleanly."
+            - href: en/10-persistence.qmd
+              text: "10 Keep data after the process exits"
+            - href: en/11-workflow.qmd
+              text: "11 Make the easy path repeatable"
+        - section: "Put it together"
+          contents:
+            - href: en/12-browser.qmd
+              text: "12 Connect a browser, then draw the trust boundary"
+            - href: en/13-finish.qmd
+              text: "13 Ship a small thing you understand"
+        - href: editions/english.qmd
+          text: "Complete edition"
+    - id: zh
+      title: "学习路线"
+      style: docked
+      contents:
+        - href: zh.qmd
+          text: "系列导读"
+        - section: "建立连接"
+          contents:
+            - href: zh/00-start.qmd
+              text: "00 从一个小项目开始"
+            - href: zh/01-request.qmd
+              text: "01 跟着一次请求走完全程"
+            - href: zh/02-routing.qmd
+              text: "02 给每项操作一个地址"
+            - href: zh/03-response.qmd
+              text: "03 让响应简单、一致"
+        - section: "实现核心"
+          contents:
+            - href: zh/04-input.qmd
+              text: "04 输入需要验证，不能直接相信"
+            - href: zh/05-middleware.qmd
+              text: "05 给处理函数增加公共行为"
+            - href: zh/06-cancellation.qmd
+              text: "06 停止已经没有必要的工作"
+            - href: zh/07-storage.qmd
+              text: "07 给数据一个合适的位置"
+        - section: "让行为可靠"
+          contents:
+            - href: zh/08-tests.qmd
+              text: "08 把预期变成自动测试"
+            - href: zh/09-lifecycle.qmd
+              text: "09 清楚地启动，妥善地停止"
+            - href: zh/10-persistence.qmd
+              text: "10 让数据在重启之后仍然存在"
+            - href: zh/11-workflow.qmd
+              text: "11 让正确的工作流程容易重复"
+        - section: "串成完整应用"
+          contents:
+            - href: zh/12-browser.qmd
+              text: "12 连接浏览器，再明确访问边界"
+            - href: zh/13-finish.qmd
+              text: "13 交付一个自己理解的小作品"
+        - href: editions/chinese.qmd
+          text: "完整阅读版"
+  page-footer:
+    left: "Pocket Framework · 从理解到实践"
+    right:
+      - text: "CodeIdea AI"
+        href: "https://codeideaai.github.io/"
+      - text: "GitHub"
+        href: "https://github.com/codeideaai/pocket-framework"
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    css: styles.css
+    toc: true
+    toc-depth: 2
+    smooth-scroll: true
+    code-copy: true
+    code-overflow: scroll
+    include-after-body: assets/reader-include.html
+execute:
+  eval: false
+lang: en

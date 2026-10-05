@@ -1,0 +1,68 @@
+---
+title: "Make the easy path repeatable"
+description: "Organize files, document the API, and automate a few useful steps."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/11-workflow.html">
+    <meta name="pocket-chinese" content="../zh/11-workflow.html">
+    <meta name="pocket-chapter" content="11-workflow">
+---
+
+::: {.chapter-intro}
+11 / POCKET NOTES · 13 min lesson · Go 1.22+
+
+[English](../en/11-workflow.qmd) · [中文](../zh/11-workflow.qmd)
+:::
+
+<!-- article-body -->
+
+## A folder should explain a responsibility {#section-0}
+
+Open examples/notebook and read the filenames as a map. main.go owns process startup and shutdown. app.go owns HTTP behavior. store.go owns note storage. mini/mini.go owns reusable HTTP helpers. app_test.go checks the contract across those pieces.
+
+Files in the same directory share package main, so go run . compiles them together. Running go run main.go alone leaves out app.go and store.go and will produce undefined-name errors. This is a frequent beginner problem that has nothing to do with the framework design.
+
+As an application grows, it may deserve cmd/notebook and internal packages. Moving files early is not automatically an improvement. Create a new package when it gives a clear boundary, not because a large repository you saw has more folders.
+
+## Automate what you already understand {#section-1}
+
+Before writing a generator, agree on one correct example by hand. A generator multiplies the quality of its template, including any mistakes. For this project, formatting, testing, and building are enough useful automation to start with.
+
+The commands below should run from examples/notebook. gofmt rewrites source formatting. go test checks behavior. go build produces a binary you can run without the go run wrapper. Keep generated binaries out of source control.
+
+A file watcher can run these commands after changes, but it must stop the old process before starting the next one. Otherwise “address already in use” may simply mean your watcher left the earlier server alive. Hot reload is a development convenience; it is not the same as graceful deployment.
+
+**Terminal · examples/notebook**
+
+```sh
+gofmt -w main.go app.go store.go app_test.go mini/mini.go
+go test ./...
+go build -o notebook .
+```
+
+## Document behavior, including errors {#section-2}
+
+An API document should let someone use the service without reading its implementation. For POST /notes, include the media type, a request example, the 201 response, title constraints, and the 400, 413, and 415 failure cases. Include the fact that the current store loses data on restart.
+
+The repository supplies api-contract.json as a small human-readable contract, not an OpenAPI document. When another team needs client generation or an interactive explorer, translate the contract into a validated OpenAPI specification and keep it in step with tests. A generated page is only as correct as the specification behind it.
+
+Background jobs deserve a separate lifecycle too. If you later add periodic cleanup, a ticker can trigger local work, but two server instances would both run it. Decide whether duplicate execution is harmless, or whether the job needs a dedicated scheduler and coordination.
+
+::: {.callout-tip}
+## Try it yourself
+
+Why can go run main.go fail even though go run . succeeds?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+The first command builds only the named file. The second builds the package, including app.go and store.go in that directory.
+:::
+
+## Further reading
+
+- [Go command](https://pkg.go.dev/cmd/go)
+- [gofmt](https://pkg.go.dev/cmd/gofmt)

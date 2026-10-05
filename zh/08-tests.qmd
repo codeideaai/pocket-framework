@@ -1,0 +1,86 @@
+---
+title: "把预期变成自动测试"
+description: "不用监听端口，也不用点浏览器，就能检查接口。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/08-tests.html">
+    <meta name="pocket-chinese" content="../zh/08-tests.html">
+    <meta name="pocket-chapter" content="08-tests">
+---
+
+::: {.chapter-intro}
+08 / POCKET NOTES · 14 分钟学习 · Go 1.22+
+
+[English](../en/08-tests.qmd) · [中文](../zh/08-tests.qmd)
+:::
+
+<!-- article-body -->
+
+## 测试客户端能看到的承诺 {#section-0}
+
+前面一直用 curl 验证行为，这适合探索接口。但每次改代码后手动重试十种请求，很容易遗漏。自动测试应该保存我们希望长期保持的行为。
+
+对于 Pocket Notes，一个有用的测试是：成功创建笔记，拒绝几种无效请求，最后确认只保存了那条有效笔记。它跨越路由、解码、校验和存储，检查客户端可以观察到的承诺，比逐行复述实现的测试更有价值。
+
+提供的 app_test.go 还检查不存在的路径、不支持的方法、过大的输入和错误的媒体类型。测试表让这些独立的输入输出案例便于阅读。失败信息应带上请求方法和路径，方便判断哪个约定被破坏了。
+
+## 用记录器代替网络连接 {#section-1}
+
+httptest.NewRequest 在内存里构造请求，NewRecorder 收集处理函数写出的状态码、响应头和响应体。直接调用 handler.ServeHTTP，就能测试 HTTP 边界，不需要占用 8080 端口，也不会留下运行中的服务进程。
+
+测试给应用传入新的 MemoryStore，以及丢弃输出的日志对象。独立状态避免不同测试运行互相依赖。下面这个聚焦的小测试可以添加到 app_test.go，所需导入已经在该文件里。
+
+记录器不是完整的网络测试，它不能证明 socket 超时或操作系统信号的行为正确。用它验证处理函数，再用真实进程单独验证启动与关闭。
+
+**Optional addition · examples/notebook/app_test.go**
+
+```go
+func TestHealth(t *testing.T) {
+    app := newApp(&MemoryStore{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+    response := httptest.NewRecorder()
+    request := httptest.NewRequest(http.MethodGet, "/health", nil)
+    app.ServeHTTP(response, request)
+    if response.Code != http.StatusOK {
+        t.Fatalf("got %d, want 200", response.Code)
+    }
+    var body map[string]string
+    if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+        t.Fatal(err)
+    }
+    if body["status"] != "ok" { t.Fatalf("unexpected body: %v", body) }
+}
+```
+
+## 故意制造失败，确认测试有效 {#section-2}
+
+在 examples/notebook 中运行 go test ./...。然后临时把现有测试里创建成功的预期状态从 201 改成 200，再运行，应该失败。改回 201 后重新验证。亲眼见过测试因正确原因失败，更能确认它真的在检查行为。
+
+如果当前 Go 平台支持竞争检测器，可以运行 go test -race ./...。它只能发现实际执行路径上的竞争，因此串行测试通过，并不能证明并发安全。要检查仓库并发行为，可以增加多个并发 Create 调用，确认编号不重复且最终数量正确。
+
+把失败当作证据。例如，预期 201 却得到 415，往往是测试忘记设置 Content-Type；404 可能是路径写错。测试代码本身也需要调试。
+
+**Terminal · examples/notebook**
+
+```sh
+go test ./...
+go test -race ./...
+```
+
+::: {.callout-tip}
+## 动手练习
+
+为什么要给每个测试新的 MemoryStore？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+让结果只依赖当前测试自己的准备过程，而不是之前测试的执行顺序或残留数据。
+:::
+
+## 延伸阅读
+
+- [httptest](https://pkg.go.dev/net/http/httptest)
+- [Go testing](https://pkg.go.dev/testing)

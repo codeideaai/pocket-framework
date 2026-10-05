@@ -1,0 +1,81 @@
+---
+title: "Connect a browser, then draw the trust boundary"
+description: "Render notes safely and understand what adding accounts really requires."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/12-browser.html">
+    <meta name="pocket-chinese" content="../zh/12-browser.html">
+    <meta name="pocket-chapter" content="12-browser">
+---
+
+::: {.chapter-intro}
+12 / POCKET NOTES · 15 min lesson · Go 1.22+
+
+[English](../en/12-browser.qmd) · [中文](../zh/12-browser.qmd)
+:::
+
+<!-- article-body -->
+
+## The browser is another client {#section-0}
+
+curl helped us focus on HTTP. A browser adds a user interface, but it still sends the same GET and POST requests. The supplied browser-client.html is a small page that reads notes and submits a new title.
+
+To serve it from the notebook application, add the optional route below inside newApp before the return statement. Run the server from examples/notebook so the relative file path resolves. Visit http://127.0.0.1:8080/. The page and API now share an origin, so this experiment does not require cross-origin configuration.
+
+This is an optional extension; the core server intentionally has only the three API routes. Adding the page makes the same data visible in a different client. It does not change where notes are stored or make them durable.
+
+**Optional addition · inside newApp in app.go**
+
+```go
+app.Handle("GET /{$}", func(c *mini.Context) {
+    http.ServeFile(c.Writer, c.Request, "browser-client.html")
+})
+```
+
+## A successful fetch can still be an HTTP error {#section-1}
+
+fetch resolves when it receives an HTTP response, even if that response has a 400 or 500 status. Check response.ok before treating the result as success. A network failure instead rejects the promise, so the page should also catch exceptions and show a useful message.
+
+Render note titles using textContent, not innerHTML. A note is text supplied by a user; interpreting that text as HTML would give it a different and dangerous meaning. The sample page creates list elements and assigns their text content.
+
+The form disables its submit button while saving and refreshes the list only after a successful write. This avoids accidental double clicks in one page, though it is not a complete server-side solution for duplicate requests. Reliable retries require an explicit idempotency design.
+
+**browser-client.html · rendering pattern**
+
+```js
+const response = await fetch('/notes');
+if (!response.ok) throw new Error(`HTTP ${response.status}`);
+const notes = await response.json();
+for (const note of notes) {
+    const item = document.createElement('li');
+    item.textContent = note.title;
+    list.append(item);
+}
+```
+
+## Accounts change the data model {#section-2}
+
+The local notebook has no accounts. Do not mistake a working form for an access-controlled service. If you add users, each note needs an owner, and both reads and writes must be scoped to the authenticated user. Hiding a button in the browser does not enforce that rule.
+
+Authentication answers who is making the request. Authorization answers whether that person may access this note. A session cookie may help with the first question, but the store query must still enforce ownership for the second. Never trust an owner ID simply because the client included it.
+
+For an account-enabled extension, use established authentication components, password hashing designed for passwords, expiring sessions, secure cookie settings, and a CSRF strategy for cookie-authenticated writes. These features are not implemented in this local example. Add their failure cases to the test plan before exposing personal notes to other users.
+
+::: {.callout-tip}
+## Try it yourself
+
+A user changes a request from note 7 to note 8. Where should ownership be checked?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+On the server, using the authenticated identity and a query or service check that scopes access to that owner. Browser controls cannot enforce authorization.
+:::
+
+## Further reading
+
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch)
+- [textContent](https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent)

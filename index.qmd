@@ -1,0 +1,58 @@
+---
+title: "Build it. Understand it."
+lang: en
+sidebar: en
+toc: false
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="index.html">
+    <meta name="pocket-chinese" content="zh.html">
+---
+
+::: {.lead}
+Fourteen practical articles. One small Go notebook service. Start with your first request and finish with a framework you can explain.
+:::
+
+[English](index.qmd) · [中文](zh.qmd)
+
+[Start learning →](en/00-start.qmd){.btn .btn-primary}
+
+## What you will build
+
+Pocket Notes accepts a title, saves it in memory, and returns a list of notes. Along the way, you will build routing, JSON helpers, validation, middleware, cancellation, storage interfaces, and tests.
+
+::: {.callout-note}
+The core examples require Go 1.22+ and use only the standard library. Database, cache, and account features are clearly marked as extension designs. Notes in the supplied application disappear after restart.
+:::
+
+## First connections
+
+- [00 · A small project, a clear destination](en/00-start.qmd) — Set up your desk, learn just enough Go, and decide what we are building.
+- [01 · Follow one request all the way home](en/01-request.qmd) — Understand the conversation before adding abstractions.
+- [02 · Give each action an address](en/02-routing.qmd) — Design the notebook API and wrap the router in a tiny engine.
+- [03 · Make responses boring and consistent](en/03-response.qmd) — Build a request wrapper and a small JSON helper.
+
+## A useful core
+
+- [04 · Treat input as a question, not a fact](en/04-input.qmd) — Accept one small JSON object and reject mistakes clearly.
+- [05 · Wrap a handler without changing its job](en/05-middleware.qmd) — Use middleware for request timing and learn why order matters.
+- [06 · Stop work nobody needs anymore](en/06-cancellation.qmd) — Use cooperative cancellation without racing the response writer.
+- [07 · Give your data a home](en/07-storage.qmd) — Separate note storage from HTTP and handle concurrent requests.
+
+## Make it dependable
+
+- [08 · Turn expectations into tests](en/08-tests.qmd) — Check the API without opening a port or clicking a browser.
+- [09 · Start clearly. Stop cleanly.](en/09-lifecycle.qmd) — Make configuration, logs, and shutdown part of the application.
+- [10 · Keep data after the process exits](en/10-persistence.qmd) — Plan a database adapter, then decide whether a cache is worth adding.
+- [11 · Make the easy path repeatable](en/11-workflow.qmd) — Organize files, document the API, and automate a few useful steps.
+
+## Put it together
+
+- [12 · Connect a browser, then draw the trust boundary](en/12-browser.qmd) — Render notes safely and understand what adding accounts really requires.
+- [13 · Ship a small thing you understand](en/13-finish.qmd) — Run the complete project, inspect its boundaries, and plan the next iteration.
+
+## Read and run
+
+- [Complete printable edition](editions/english.qmd)
+- [Download the examples](assets/pocket-notes-examples.zip)
+- [GitHub](https://github.com/codeideaai/pocket-framework)

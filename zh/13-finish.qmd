@@ -1,0 +1,70 @@
+---
+title: "交付一个自己理解的小作品"
+description: "运行完整项目，检查能力边界，规划下一次迭代。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/13-finish.html">
+    <meta name="pocket-chinese" content="../zh/13-finish.html">
+    <meta name="pocket-chapter" content="13-finish">
+---
+
+::: {.chapter-intro}
+13 / POCKET NOTES · 15 分钟学习 · Go 1.22+
+
+[English](../en/13-finish.qmd) · [中文](../zh/13-finish.qmd)
+:::
+
+<!-- article-body -->
+
+## 重新走一遍完整路径 {#section-0}
+
+一个 POST 请求到达服务器，经过计时中间件，在 Engine 中匹配路由，再获得 mini.Context。处理函数检查媒体类型，解码一个有大小限制的 JSON 值，验证标题，并调用 NoteStore.Create。仓库在锁保护下分配编号，处理函数发送 JSON 响应，中间件记录耗时。
+
+现在，每一部分都有存在的理由。框架负责可复用的 HTTP 机制，应用负责笔记规则，存储实现负责同步和状态，main 负责进程生命周期。你可以通过追踪一次请求解释架构，而不是死记一张图。
+
+下面的命令在 examples/notebook 中执行。新进程的 GET /notes 返回 []；成功 POST 一次后，就会返回一条笔记。尝试自己的修改前后，都运行一次测试。
+
+**Terminal · examples/notebook**
+
+```sh
+go test ./...
+go build -o notebook .
+./notebook
+# In a second terminal:
+# curl http://127.0.0.1:8080/notes
+# curl -H 'Content-Type: application/json' #   -d '{"title":"I can trace a request"}' http://127.0.0.1:8080/notes
+```
+
+## 发布是一套可重复的过程 {#section-1}
+
+对于这个本地项目，交付意味着经过测试的源码，以及针对目标操作系统构建的二进制。Linux 机器不能直接运行 macOS 二进制。应按目标环境构建，记录源码版本，并把运行配置与可执行文件分开。
+
+真正部署之前，需要实现持久化存储和用户所需的访问模型，配置合适的 HTTPS 入口、进程管理、日志和备份。把监听地址从 127.0.0.1 改成公网地址，并不等于完成了部署方案。
+
+一个实用的发布演练有四步：在测试环境启动新版本，检查就绪状态和真实的创建、读取流程，用预期信号停止服务，再演练恢复上一版本。数据库迁移可能让回退比替换二进制更复杂，因此需要单独验证。
+
+## 选一个下一步，并写清完成标准 {#section-2}
+
+一个合适的下一步是 GET /notes/{id}。先规定可观察行为：存在的编号返回一条笔记，不存在的编号返回 404，格式错误的编号返回 400。然后增加仓库方法，按相同的加锁规则实现，注册路由，再测试这三种情况。
+
+另一个有用的功能是分页。写查询前，先定义最大页大小与稳定排序。第三个方向是按第 10 篇的适配层设计实现持久化。一次选一个方向；同时修改路由、存储、账户和部署，会让故障难以定位。
+
+你已经做出了一个小型教学框架，这并不意味着它替代了所有生产框架。但这项成果很具体：现在你可以根据一个库减少了哪些工作、保证了哪些行为、增加了多少复杂度来评价它。保留真正帮助应用的部分，让实际需求推动下一次抽象。
+
+::: {.callout-tip}
+## 动手练习
+
+在实现第一个扩展前，先写出三个验收条件。
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+例如 GET /notes/{id}：已有编号返回 200 和正确笔记，不存在的编号返回 404，非整数编号返回 400。这些条件同时指导实现与测试。
+:::
+
+## 延伸阅读
+
+- [Go build command](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies)

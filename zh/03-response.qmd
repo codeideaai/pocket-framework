@@ -1,0 +1,91 @@
+---
+title: "让响应简单、一致"
+description: "封装单次请求，写一个小巧的 JSON 响应方法。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/03-response.html">
+    <meta name="pocket-chinese" content="../zh/03-response.html">
+    <meta name="pocket-chapter" content="03-response">
+---
+
+::: {.chapter-intro}
+03 / POCKET NOTES · 13 分钟学习 · Go 1.22+
+
+[English](../en/03-response.qmd) · [中文](../zh/03-response.qmd)
+:::
+
+<!-- article-body -->
+
+## 从已经出现的重复开始 {#section-0}
+
+三个处理函数都需要读取请求、写出响应，也都需要输出 JSON。如果每个函数都复制一遍响应头和序列化逻辑，就会增加重复出错的机会。现在适合做一个小抽象，因为我们已经能准确说出哪些工作在重复。
+
+框架的 Context 把单次请求的 Writer 和 Request 放在一起，在进入注册的处理函数时创建。它不应在不同请求间共享，也不应变成保存全局应用状态的容器。笔记仓库属于应用，不属于这个临时包装对象。
+
+本系列里有两个容易混淆的 context：mini.Context 是我们提供便利方法的包装类型；标准库的 context.Context 负责传递取消信号和截止时间。后者通过 c.Request.Context() 取得。先分清它们，后面就不容易绕晕。
+
+## 先序列化，再发送状态码 {#section-1}
+
+JSON 方法先把数据序列化成字节，成功后再设置 Content-Type 并发送状态码。顺序很重要：响应一旦开始发送，就无法把已经发出的成功状态替换成错误状态。
+
+遇到 channel 之类不支持的值时，Marshal 会失败；客户端断开连接时，写出操作也可能失败。因此方法返回 error，而不是假定这些操作永远成功。应用中的 reply 辅助函数负责记录错误。当前响应只包含字符串、整数、映射和切片，刻意保持容易序列化。
+
+同一条响应不要调用两次 JSON。第二次调用只会继续追加响应体，并不会干净地替换之前的内容。发送错误后立即 return，是避免“先报错、又成功”这种混乱响应的简单习惯。
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Context struct {
+    Writer  http.ResponseWriter
+    Request *http.Request
+}
+
+func (c *Context) JSON(status int, value any) error {
+    data, err := json.Marshal(value)
+    if err != nil { return err }
+    c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+    c.Writer.WriteHeader(status)
+    _, err = c.Writer.Write(append(data, '
+'))
+    return err
+}
+```
+
+## 把包装类型接到路由器上 {#section-2}
+
+我们把 Handler 定义为接收 *Context 的函数。Engine.Handle 再把它转换成 ServeMux 所需要的函数形状。适配器并不神秘，就是一小段连接不同接口的代码。
+
+注意，框架仍然不需要导入 Note。它可以输出健康检查结果、笔记列表，或其他应用的数据。这里有一个实用判断：如果业务对象一变，mini 就必须修改，通常说明框架知道的业务细节太多了。
+
+完整应用中的 GET /health 返回 {"status":"ok"}。用 curl -i 检查响应体和内容类型。仅仅“看起来像 JSON”，却没有正确的 Content-Type，仍然不是完整的接口约定。
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Handler func(*Context)
+
+func (e *Engine) Handle(pattern string, handler Handler) {
+    e.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+        handler(&Context{Writer: w, Request: r})
+    })
+}
+```
+
+::: {.callout-tip}
+## 动手练习
+
+为什么 JSON 方法要在 WriteHeader 之前调用 Marshal？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+序列化可能失败。先完成序列化，能避免在确认数据可编码之前，就已经发出了成功状态。
+:::
+
+## 延伸阅读
+
+- [JSON encoding](https://pkg.go.dev/encoding/json#Marshal)
+- [ResponseWriter](https://pkg.go.dev/net/http#ResponseWriter)

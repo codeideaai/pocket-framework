@@ -1,0 +1,88 @@
+---
+title: "清楚地启动，妥善地停止"
+description: "让配置、日志和关闭流程成为应用的一部分。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/09-lifecycle.html">
+    <meta name="pocket-chinese" content="../zh/09-lifecycle.html">
+    <meta name="pocket-chapter" content="09-lifecycle">
+---
+
+::: {.chapter-intro}
+09 / POCKET NOTES · 16 分钟学习 · Go 1.22+
+
+[English](../en/09-lifecycle.qmd) · [中文](../zh/09-lifecycle.qmd)
+:::
+
+<!-- article-body -->
+
+## 配置也是输入，只是发生在启动时 {#section-0}
+
+把端口写死为 8080，直到想同时启动两个服务时才显得不方便。笔记程序按三层优先级选择地址：默认值 127.0.0.1:8080，其次是环境变量 NOTE_ADDR，最后由命令行 -addr 覆盖。
+
+程序先调用 net.Listen 成功，才记录“正在监听”。这是一条很实用的原则：日志应该描述确实发生的事情。无效地址或被占用的端口会立即导致启动失败，而不是留下一个半启动的服务。
+
+配置用于不同环境间会变化的内容，不必把所有内部常量都变成配置。标题长度限制属于 API 约定，监听地址属于运行环境。混淆这两类选择，会让配置难以理解。
+
+**Terminal · examples/notebook · run one command at a time**
+
+```sh
+go run . -addr 127.0.0.1:9090
+# Or set the environment for this one command:
+NOTE_ADDR=127.0.0.1:9090 go run .
+```
+
+## main 退出前，要等关闭流程完成 {#section-1}
+
+收到中断或 SIGTERM 后，进程应该停止接收新工作，并给正在处理的请求一点时间完成。Server.Shutdown 会为普通 HTTP 连接完成这些工作，但不会自动管理所有后台任务或被接管的连接。
+
+关闭流程需要一个新的时间预算。信号 context 此时已经取消，如果直接使用它，等待关闭也会立即取消。程序会新建一个五秒预算，等待 Shutdown，若超时则关闭剩余连接。
+
+完整 main.go 还会等待提供服务的 goroutine 结束，并把 http.ErrServerClosed 视作正常结果。如果 main 太早返回，进程会在关闭流程尚未完成时退出。测试信号时请先编译成二进制，让收到中断的进程就是服务器本身。
+
+**examples/notebook/main.go · excerpt inside run**
+
+```go
+ctx, release := context.WithTimeout(context.Background(), 5*time.Second)
+defer release()
+if err := server.Shutdown(ctx); err != nil {
+    _ = server.Close()
+    return fmt.Errorf("shutdown: %w", err)
+}
+```
+
+## 让日志回答具体问题 {#section-2}
+
+slog 输出结构化 JSON 日志，包含消息和具名字段。启动日志记录实际地址，请求日志记录方法、路径和耗时。字段独立后，日志工具可以直接按路径筛选，不必从一句话里重新解析信息。
+
+按下面的方式编译并运行。在另一个终端发出请求，再回到服务终端按 Control+C。正常关闭不应该出现“server stopped”错误。如果在同一地址启动两个实例，第二个应立即因绑定失败退出。
+
+当前健康检查只说明进程可以返回响应。添加数据库后，再决定是否需要独立的就绪检查。“进程还活着”和“已经可以处理有效业务”是两个不同的问题。
+
+**Terminal · examples/notebook**
+
+```sh
+go build -o notebook .
+./notebook -addr 127.0.0.1:8080
+# Press Control+C to stop.
+```
+
+::: {.callout-tip}
+## 动手练习
+
+signal.NotifyContext 的 Done 已经触发后，为什么不直接把这个 context 传给 Shutdown？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+它已经被取消。新的 context 才能给关闭流程一段独立、有限的等待时间。
+:::
+
+## 延伸阅读
+
+- [Server.Shutdown](https://pkg.go.dev/net/http#Server.Shutdown)
+- [Structured logging](https://pkg.go.dev/log/slog)
+- [Signal contexts](https://pkg.go.dev/os/signal#NotifyContext)

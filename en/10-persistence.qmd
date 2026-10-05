@@ -1,0 +1,74 @@
+---
+title: "Keep data after the process exits"
+description: "Plan a database adapter, then decide whether a cache is worth adding."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/10-persistence.html">
+    <meta name="pocket-chinese" content="../zh/10-persistence.html">
+    <meta name="pocket-chapter" content="10-persistence">
+---
+
+::: {.chapter-intro}
+10 / POCKET NOTES · 16 min lesson · Go 1.22+
+
+[English](../en/10-persistence.qmd) · [中文](../zh/10-persistence.qmd)
+:::
+
+<!-- article-body -->
+
+## Replace the store, keep the contract {#section-0}
+
+The memory store taught us the API without requiring infrastructure. Its next limitation is durability. A SQL implementation of NoteStore can preserve notes across restarts while the handlers keep calling List and Create.
+
+This article is an extension design, not a claim that the supplied server already has a database. To implement it, choose a database and driver, create a notes table with a generated integer primary key and a required title, and write a SQLStore that holds a shared *sql.DB. That value manages a connection pool; it is not a single connection to create for every request.
+
+Create the pool once at startup, verify connectivity with PingContext, inject the store, and close the pool after request shutdown completes. Keep schema migrations as explicit versioned steps. Running a migration is an operational change, not something each request should attempt.
+
+## Pass data as parameters {#section-1}
+
+SQL and user input must remain separate. The query below is a PostgreSQL-style illustration: $1 is a parameter placeholder, and title is supplied separately. Other drivers may use different placeholders. Do not turn this into string concatenation, even if your current title validator looks strict.
+
+A useful Create operation returns the actual generated ID, so the client can identify the saved note. If a business operation changes several related records, place those changes inside a transaction and handle commit errors. A transaction groups database changes; it does not make an email or another remote service part of the same atomic operation.
+
+List should use a defined order and eventually pagination. Without an ORDER BY, SQL results do not promise a stable order. Test the SQL implementation against a real test database as well as testing handlers with a memory store.
+
+**Design excerpt · not part of the runnable memory example**
+
+```go
+// Design excerpt: requires a configured PostgreSQL driver,
+// an existing notes table, db *sql.DB, ctx, and title.
+var id int
+err := db.QueryRowContext(ctx,
+    "INSERT INTO notes (title) VALUES ($1) RETURNING id",
+    title,
+).Scan(&id)
+// Check err before returning Note{ID: id, Title: title}.
+```
+
+## A cache creates a freshness problem {#section-2}
+
+Do not add a cache just because the project has a database. First measure a repeated slow read. A cache can save a result temporarily, but then every write raises a question: what happens to the old cached result?
+
+For a small notes list, a first design might cache GET results briefly and invalidate the list key after a successful Create. Even that has a race: a reader may load old data before a write and put it into the cache after invalidation. Expiration limits how long it stays stale but does not guarantee perfect consistency.
+
+Write down the acceptable freshness window before choosing Redis or any cache library. Keep the database as the durable source of truth. If the cache is unavailable, decide whether the application can fall back to the database without overwhelming it. These are behavioral choices, not just connection settings.
+
+::: {.callout-tip}
+## Try it yourself
+
+A note was committed to the database, but updating the cache failed. Should the client blindly retry creation?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+No. Creation already happened, so an unguarded retry can create a duplicate. Separate the durable write result from cache maintenance and define retry/idempotency behavior.
+:::
+
+## Further reading
+
+- [Database access](https://go.dev/doc/database/)
+- [SQL parameters](https://go.dev/doc/database/sql-injection)
+- [Managing connections](https://go.dev/doc/database/manage-connections)

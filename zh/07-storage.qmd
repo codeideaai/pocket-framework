@@ -1,0 +1,87 @@
+---
+title: "给数据一个合适的位置"
+description: "把笔记存储与 HTTP 分开，并处理并发请求。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/07-storage.html">
+    <meta name="pocket-chinese" content="../zh/07-storage.html">
+    <meta name="pocket-chapter" content="07-storage">
+---
+
+::: {.chapter-intro}
+07 / POCKET NOTES · 15 分钟学习 · Go 1.22+
+
+[English](../en/07-storage.qmd) · [中文](../zh/07-storage.qmd)
+:::
+
+<!-- article-body -->
+
+## 先声明需要的能力 {#section-0}
+
+处理函数需要两项能力：列出笔记、创建笔记。它不必知道数据保存在内存、SQLite，还是其他数据库。NoteStore 接口用两个方法表达这些能力。
+
+应用启动时，把一个 NoteStore 传给 newApp。这就是最直接的依赖注入：把需要的东西通过参数传进去。没有需要查找的服务注册表，编译器也能检查方法是否满足要求。
+
+Note 类型通过 JSON 标签，让 API 输出小写字段名。ID 由仓库生成，客户端只提供标题。分清这些职责，可以避免客户端随意选择编号而与已有数据冲突。
+
+**examples/notebook/store.go · excerpt**
+
+```go
+type Note struct {
+    ID    int    `json:"id"`
+    Title string `json:"title"`
+}
+
+type NoteStore interface {
+    List(context.Context) ([]Note, error)
+    Create(context.Context, string) (Note, error)
+}
+```
+
+## 两个请求可能同时到达 {#section-1}
+
+服务器可能同时执行多个处理函数。如果两个请求都在没有协调的情况下读取、增加 nextID，可能出现重复编号或数据竞争。一个请求写切片、另一个请求读切片时，也需要保护共享状态。
+
+MemoryStore 使用一把互斥锁保护状态。Lock 获得独占访问权，defer Unlock 在函数返回时释放。对这个小型教学应用，一把锁容易理解，也足够使用。Go 互斥锁等待本身不会响应 context 取消，因此我们在获取锁之后检查 context。
+
+List 在持锁期间复制切片。如果直接返回内部切片，调用者可能一直引用后续还会改变的存储。复制后，处理函数得到自己的快照。我们还会创建非 nil 的空切片，让空集合编码成 []，而不是 null。
+
+**examples/notebook/store.go · excerpt**
+
+```go
+func (s *MemoryStore) List(ctx context.Context) ([]Note, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    if err := ctx.Err(); err != nil { return nil, err }
+    result := make([]Note, len(s.notes))
+    copy(result, s.notes)
+    return result, nil
+}
+```
+
+## 明确内存存储没有承诺什么 {#section-2}
+
+创建一条笔记，停止服务器，重新启动，再读取列表，你会得到空数组。这是当前实现的明确行为，并不是神秘的持久化故障。数据只存在于正在运行的进程中。
+
+互斥锁只能协调这个进程里的请求，不能协调两个独立进程。如果在不同端口启动两个实例，它们各自拥有笔记和编号计数器。当你需要重启后仍保留数据，或多个实例共享数据时，就需要共享的持久化存储。
+
+当前仓库还会无限增长，适合短时间的本地实验，不适合长期公开运行。接口的好处是，我们可以更换存储实现，而基本不改 HTTP 处理函数。
+
+::: {.callout-tip}
+## 动手练习
+
+List 已经加锁了，为什么还要复制笔记切片？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+List 返回时锁就释放了。复制可以避免调用者继续共享后续可能被修改的底层切片存储。
+:::
+
+## 延伸阅读
+
+- [Mutex](https://pkg.go.dev/sync#Mutex)
+- [Race detector](https://go.dev/doc/articles/race_detector)

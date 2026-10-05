@@ -1,0 +1,79 @@
+---
+title: "输入需要验证，不能直接相信"
+description: "只接收一个小 JSON 对象，清楚地处理错误。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/04-input.html">
+    <meta name="pocket-chinese" content="../zh/04-input.html">
+    <meta name="pocket-chapter" content="04-input">
+---
+
+::: {.chapter-intro}
+04 / POCKET NOTES · 15 分钟学习 · Go 1.22+
+
+[English](../en/04-input.qmd) · [中文](../zh/04-input.qmd)
+:::
+
+<!-- article-body -->
+
+## 解析成功只是第一关 {#section-0}
+
+客户端希望发送 {"title":"Learn Go"} 来创建笔记。这里要分别回答几个问题：消息体是不是 JSON？有没有超出大小限制？是不是只有一个值？字段是否符合预期？标题是否有效？只解决第一个问题，还算不上输入校验。
+
+我们的约定是：接收 application/json，消息体上限为 4096 字节，拒绝未知字段，去掉标题前后的空白。处理后的标题必须包含 1 到 120 个 Unicode 码点。码点不一定等于肉眼看到的字符，例如一个表情组合可能包含多个码点。
+
+媒体类型不支持时返回 415，解码器遇到大小限制时返回 413，内容无效时返回 400。如果很大的畸形请求先触发语法错误，也可能返回 400。真正要保证的是：无效输入不会变成已保存的笔记。
+
+## 读完一个值，再确认结束 {#section-1}
+
+JSON 解码器一次读取一个值。第一次 Decode 成功，并不能证明后面没有其他内容。第二次解码必须得到 io.EOF，否则 {"title":"a"} {} 这种包含两个值的输入就会被悄悄放过。
+
+实现中会在解码前使用 MaxBytesReader。只检查 Content-Length 不够，因为这个头可能不存在；应用需要限制实际读取的字节。DisallowUnknownFields 则能帮助发现把 title 写成 titel 这样的字段拼写错误。
+
+解码完成后，先去掉空白、校验标题，再调用仓库。保持“解码、校验、保存”的顺序。下面是成功路径的结构，app.go 中包含完整的错误分支和媒体类型检查。
+
+**examples/notebook/app.go · setup excerpt**
+
+```go
+c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+var input struct { Title string `json:"title"` }
+dec := json.NewDecoder(c.Request.Body)
+dec.DisallowUnknownFields()
+// Check the first Decode error, then require io.EOF on the second.
+// See app.go for all error branches.
+```
+
+## 错误分支也要亲自验证 {#section-2}
+
+向笔记服务发送下面的请求。第一条应返回 201，以及带编号的笔记；第二条应返回 400，因为纯空白不是有效标题。之后 GET /notes 应只出现成功创建的笔记，不应留下失败请求产生的空记录。
+
+接着试试拼错字段名，或者在后面追加第二个 JSON 对象，两者都应被拒绝。如果意外得到 415，请检查 Content-Type。curl 不会因为数据看起来像 JSON，就自动推断它是 application/json。
+
+这个练习揭示了一条通用原则：先校验，再改变状态。如果拒绝输入时不需要撤销半完成的写入，错误处理就会简单很多。
+
+**Second terminal**
+
+```sh
+curl -i http://127.0.0.1:8080/notes   -H 'Content-Type: application/json'   -d '{"title":"Learn Go"}'
+curl -i http://127.0.0.1:8080/notes   -H 'Content-Type: application/json'   -d '{"title":"   "}'
+curl http://127.0.0.1:8080/notes
+```
+
+::: {.callout-tip}
+## 动手练习
+
+为什么 len(title) 不适合直接实现这里的标题长度规则？
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+Go 字符串的 len 计算字节数。utf8.RuneCountInString 计算 Unicode 码点数，符合这里明确选择的计量单位。
+:::
+
+## 延伸阅读
+
+- [Decoder](https://pkg.go.dev/encoding/json#Decoder)
+- [MaxBytesReader](https://pkg.go.dev/net/http#MaxBytesReader)

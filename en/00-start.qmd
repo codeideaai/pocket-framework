@@ -1,0 +1,69 @@
+---
+title: "A small project, a clear destination"
+description: "Set up your desk, learn just enough Go, and decide what we are building."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/00-start.html">
+    <meta name="pocket-chinese" content="../zh/00-start.html">
+    <meta name="pocket-chapter" content="00-start">
+---
+
+::: {.chapter-intro}
+00 / POCKET NOTES · 10 min lesson · Go 1.22+
+
+[English](../en/00-start.qmd) · [中文](../zh/00-start.qmd)
+:::
+
+<!-- article-body -->
+
+## Build something you can explain {#section-0}
+
+Imagine a notebook with only two actions: save a short note and read your notes. A browser sends a message, a Go program decides what to do, and a response comes back. That tiny loop contains the central ideas of a web framework.
+
+Our project is called Pocket Notes. We will first make the loop work, then extract the repeated parts into a package named mini. The application knows what a note is. The framework knows how to route a request and write a response. Keeping that boundary visible is the point of the series.
+
+You do not need to know networking or a web framework already. You should be able to create a file and open a terminal. Every runnable command uses macOS/Linux shell syntax. Windows users can follow inside WSL. Each article names the file or function it discusses; short excerpts explain one idea, while the examples directory contains complete programs.
+
+## Prepare one working directory {#section-1}
+
+Install Go using the official installation guide, then open a new terminal and run go version. These examples require Go 1.22 or later because they use method-aware routing patterns. Use a currently supported Go release for your own work. An editor and a terminal are enough; there is no database to install for the core project.
+
+From this series folder, enter examples/hello and run the commands below. A module is a group of Go packages that share a go.mod file. Its module path is the name used in imports; example.com/hello is a teaching name and does not require owning a domain. The supplied example already has go.mod, so do not run go mod init there again.
+
+The last command stays running. That is expected: a server waits for requests. Open the address shown in the terminal. Press Control+C in that terminal when you want to stop it.
+
+**Terminal · examples/hello**
+
+```sh
+cd examples/hello
+go version
+go run .
+# Open http://127.0.0.1:8080 in your browser.
+```
+
+## Read Go without memorizing everything {#section-2}
+
+A package groups related code. package main plus a main function makes an executable program. import brings in another package. A function declares inputs inside parentheses and results after them. The := operator declares a variable and gives it an initial value.
+
+A struct groups named fields. A method is a function attached to a type. An interface lists the methods a value must provide. We will meet each of these when it solves a real problem, rather than building an abstract vocabulary first.
+
+When a function returns an error, check it. A missing error check turns a useful message such as “address already in use” into a mystery. If go is not found, finish the installation and reopen your terminal. If port 8080 is busy, stop the earlier example before starting another.
+
+::: {.callout-tip}
+## Try it yourself
+
+Change the greeting, restart the program, and explain why refreshing the browser alone did not change it.
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+go run compiles and starts a program. The running program does not automatically reload edited source files. Stop it and run go run . again.
+:::
+
+## Further reading
+
+- [Install Go](https://go.dev/doc/install)
+- [Go tutorial](https://go.dev/doc/tutorial/getting-started)

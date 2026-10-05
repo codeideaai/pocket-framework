@@ -1,0 +1,69 @@
+---
+title: "从一个小项目开始"
+description: "准备开发环境，认识必要的 Go 语法，明确我们要做什么。"
+lang: zh
+sidebar: zh
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/00-start.html">
+    <meta name="pocket-chinese" content="../zh/00-start.html">
+    <meta name="pocket-chapter" content="00-start">
+---
+
+::: {.chapter-intro}
+00 / POCKET NOTES · 10 分钟学习 · Go 1.22+
+
+[English](../en/00-start.qmd) · [中文](../zh/00-start.qmd)
+:::
+
+<!-- article-body -->
+
+## 做一个自己能解释清楚的东西 {#section-0}
+
+想象一个只有两项功能的笔记本：保存一句话，再读出已经保存的内容。浏览器发出消息，Go 程序决定怎么处理，然后返回结果。这个很小的过程，已经包含了 Web 框架的核心思想。
+
+我们的项目叫 Pocket Notes。先让这个过程跑通，再把重复的工作提取到 mini 包中。应用知道什么是笔记，框架负责匹配请求和组织响应。整个系列最重要的事情，就是看清这条分工边界。
+
+你不需要学过网络编程，也不需要用过框架，只要能创建文件、打开终端即可。文中的命令采用 macOS/Linux 的 shell 语法，Windows 可以在 WSL 中操作。每篇文章都会标明涉及的文件或函数；短代码用于解释一个概念，examples 目录则提供完整程序。
+
+## 准备工作目录 {#section-1}
+
+按照 Go 官方安装指南安装工具链，再打开一个新终端运行 go version。示例要求 Go 1.22 或更高版本，因为我们会使用带请求方法的路由规则。实际开发请选择仍受支持的 Go 版本。核心项目只需要编辑器和终端，不必先安装数据库。
+
+在本系列的目录下，进入 examples/hello，运行下面的命令。模块是共享一个 go.mod 文件的一组 Go 包。模块路径用于 import 导入；example.com/hello 是教学名称，不需要购买域名。示例已提供 go.mod，因此不必再次运行 go mod init。
+
+最后一条命令会一直运行，这是正常现象：服务器正在等待请求。打开终端提示的地址，就能看到结果。想停止时，在运行服务的终端按 Control+C。
+
+**Terminal · examples/hello**
+
+```sh
+cd examples/hello
+go version
+go run .
+# Open http://127.0.0.1:8080 in your browser.
+```
+
+## 先读懂眼前需要的 Go {#section-2}
+
+package 把相关代码放在一起。package main 配合 main 函数，构成可执行程序。import 用于导入其他包。函数在括号里声明输入参数，在括号后声明返回值。:= 表示声明变量并赋初值。
+
+struct 把几个有名字的字段组合起来。方法是属于某个类型的函数。接口列出一个值需要提供哪些方法。我们会在真正用到的时候逐一认识它们，不必先背完术语。
+
+如果函数返回 error，就要检查它。忽略错误会把“端口已被占用”这样清楚的提示，变成让人摸不着头脑的问题。如果终端找不到 go，请完成安装后重新打开终端。如果 8080 端口被占用，先停止之前启动的示例。
+
+::: {.callout-tip}
+## 动手练习
+
+修改问候语，重启程序，并解释为什么只刷新浏览器不会更新内容。
+:::
+
+::: {.callout-note collapse=true}
+## 参考解释
+
+go run 会编译并启动程序。正在运行的程序不会自动重新读取修改后的源码，需要停止后重新运行 go run .。
+:::
+
+## 延伸阅读
+
+- [Install Go](https://go.dev/doc/install)
+- [Go tutorial](https://go.dev/doc/tutorial/getting-started)

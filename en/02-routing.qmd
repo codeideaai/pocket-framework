@@ -1,0 +1,79 @@
+---
+title: "Give each action an address"
+description: "Design the notebook API and wrap the router in a tiny engine."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/02-routing.html">
+    <meta name="pocket-chinese" content="../zh/02-routing.html">
+    <meta name="pocket-chapter" content="02-routing">
+---
+
+::: {.chapter-intro}
+02 / POCKET NOTES · 12 min lesson · Go 1.22+
+
+[English](../en/02-routing.qmd) · [中文](../zh/02-routing.qmd)
+:::
+
+<!-- article-body -->
+
+## Name resources, then choose actions {#section-0}
+
+A note is our resource. Reading the collection becomes GET /notes; creating one becomes POST /notes. The path identifies what we are working with, and the method tells us what kind of operation is intended. Keeping those choices predictable makes both clients and tests easier to write.
+
+For now, we need three routes: GET /health to check that the process responds, GET /notes to list notes, and POST /notes to create a note. We deliberately postpone editing and deletion. A small working boundary is easier to reason about than a large collection of unfinished endpoints.
+
+There is a meaningful distinction between 404 and 405. A missing path gets 404. A known path with an unsupported method gets 405. We let ServeMux handle that distinction, including the Allow header, instead of introducing a second, slightly different routing system.
+
+## An engine can start as a wrapper {#section-1}
+
+The Engine type in mini owns a ServeMux. Its ServeHTTP method forwards the request to that router. This single method makes Engine satisfy http.Handler, so the standard server can use it directly. Go interfaces are satisfied by methods; there is no “implements” declaration to write.
+
+Why add a wrapper at all? It gives our application one place to register framework handlers and gives us a home for future shared behavior. It is not a routing performance optimization. We gain a small API boundary while retaining the router’s existing behavior.
+
+The excerpt below lives in mini.go. It is not a separate program: it needs package mini, the net/http import, and the Handle method shown with the request wrapper in the next article. The complete file is already supplied in the example.
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Engine struct { mux *http.ServeMux }
+
+func New() *Engine {
+    return &Engine{mux: http.NewServeMux()}
+}
+
+func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    e.mux.ServeHTTP(w, r)
+}
+```
+
+## Try the contract before growing it {#section-2}
+
+Stop the hello server, then run go run . from examples/notebook. Run the requests below in another terminal. GET /notes returns an empty JSON array when the application has just started. DELETE /notes returns 405. GET /missing returns 404.
+
+Register routes before starting the server. A duplicate or conflicting pattern can panic during registration, which is a startup error you should fix rather than hide. If you later add GET /notes/{id}, read r.PathValue("id") for the path value and validate it before using it as an integer. A route matching a string does not prove that the string is a valid record ID.
+
+**Second terminal**
+
+```sh
+curl -i http://127.0.0.1:8080/notes
+curl -i -X DELETE http://127.0.0.1:8080/notes
+curl -i http://127.0.0.1:8080/missing
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+Should GET /notes create a new note as a side effect? Explain your choice.
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+No. Reading should not intentionally change application state. Browsers, crawlers, and clients may repeat reads; creation belongs to the POST route.
+:::
+
+## Further reading
+
+- [ServeMux patterns](https://pkg.go.dev/net/http#ServeMux)

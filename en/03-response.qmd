@@ -1,0 +1,91 @@
+---
+title: "Make responses boring and consistent"
+description: "Build a request wrapper and a small JSON helper."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/03-response.html">
+    <meta name="pocket-chinese" content="../zh/03-response.html">
+    <meta name="pocket-chapter" content="03-response">
+---
+
+::: {.chapter-intro}
+03 / POCKET NOTES · 13 min lesson · Go 1.22+
+
+[English](../en/03-response.qmd) · [中文](../zh/03-response.qmd)
+:::
+
+<!-- article-body -->
+
+## Remove repetition you can already see {#section-0}
+
+Our three handlers all need the request and the response writer. They also need to produce JSON. Copying header setup and serialization into every handler creates several places to make the same mistake. This is a good time for a small abstraction because we can name the repeated work precisely.
+
+The framework Context groups Writer and Request for one request. It is allocated when the request enters the registered handler. It is not shared across requests and must not become a place to store global application state. A note repository belongs to the application, not to this temporary wrapper.
+
+There are two different uses of the word context in this series. mini.Context is our convenience wrapper. context.Context from Go’s standard library carries cancellation and deadlines. You access the latter through c.Request.Context(). Keeping the names straight prevents a lot of confusion later.
+
+## Serialize before sending the status {#section-1}
+
+The JSON method first turns the value into bytes. Only after serialization succeeds does it set Content-Type and send the status. That order matters: once the response has begun, you cannot replace an already sent success status with an error status.
+
+Marshal can fail for unsupported values such as a channel. Writing can also fail when the client disconnects. The method returns an error instead of pretending either operation is infallible. The application’s reply helper logs that error. Our current response types contain only strings, integers, maps, and slices, so they are intentionally simple to serialize.
+
+Do not call JSON twice for the same response. It would append another body rather than produce a clean replacement. After sending an error, return from the handler. That small habit prevents many accidental “error plus success” responses.
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Context struct {
+    Writer  http.ResponseWriter
+    Request *http.Request
+}
+
+func (c *Context) JSON(status int, value any) error {
+    data, err := json.Marshal(value)
+    if err != nil { return err }
+    c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+    c.Writer.WriteHeader(status)
+    _, err = c.Writer.Write(append(data, '
+'))
+    return err
+}
+```
+
+## Connect the wrapper to the router {#section-2}
+
+We define Handler as a function taking *Context. Engine.Handle adapts it to the function shape expected by ServeMux. An adapter is simply a small piece of code that connects two compatible ideas with different interfaces.
+
+Notice that the framework still does not import Note. It can return a health response, a note list, or another application’s data. This is a useful test of the boundary: if changing the business object forces a change in mini, the framework probably knows too much.
+
+In the completed app, GET /health returns {"status":"ok"}. Inspect it with curl -i and confirm both the content type and the body. A body that looks like JSON without the appropriate content type is an incomplete contract.
+
+**examples/notebook/mini/mini.go · excerpt**
+
+```go
+type Handler func(*Context)
+
+func (e *Engine) Handle(pattern string, handler Handler) {
+    e.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+        handler(&Context{Writer: w, Request: r})
+    })
+}
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+Why does the JSON helper marshal before calling WriteHeader?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+Serialization can fail. Doing it first avoids committing a success response before knowing whether the value can be encoded.
+:::
+
+## Further reading
+
+- [JSON encoding](https://pkg.go.dev/encoding/json#Marshal)
+- [ResponseWriter](https://pkg.go.dev/net/http#ResponseWriter)

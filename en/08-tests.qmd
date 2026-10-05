@@ -1,0 +1,86 @@
+---
+title: "Turn expectations into tests"
+description: "Check the API without opening a port or clicking a browser."
+lang: en
+sidebar: en
+include-in-header:
+  text: |
+    <meta name="pocket-english" content="../en/08-tests.html">
+    <meta name="pocket-chinese" content="../zh/08-tests.html">
+    <meta name="pocket-chapter" content="08-tests">
+---
+
+::: {.chapter-intro}
+08 / POCKET NOTES · 14 min lesson · Go 1.22+
+
+[English](../en/08-tests.qmd) · [中文](../zh/08-tests.qmd)
+:::
+
+<!-- article-body -->
+
+## Test the promise a client sees {#section-0}
+
+We have been testing with curl. That is useful for exploration, but repeating ten requests by hand after every edit is easy to forget. A test should capture the behavior we intend to preserve.
+
+For Pocket Notes, a useful test creates a note, rejects several invalid requests, then confirms that only the valid note was saved. This checks an observable promise across routing, decoding, validation, and storage. It is more valuable than a test that merely repeats the implementation line by line.
+
+The supplied app_test.go also checks missing routes, unsupported methods, oversized input, and incorrect media types. A test table keeps these independent input/output cases readable. A failure should name the method and path so you know which promise changed.
+
+## A recorder stands in for the connection {#section-1}
+
+httptest.NewRequest constructs a request in memory. NewRecorder collects the status, headers, and body written by the handler. Calling handler.ServeHTTP directly exercises the HTTP boundary without reserving port 8080 or leaving a server process running.
+
+The app receives a fresh MemoryStore and a logger that discards output. Fresh state prevents one test run from depending on another. The example below is a focused test you can add to app_test.go; its imports are already present there.
+
+A recorder is not a complete network test. It does not prove that socket timeouts or operating-system signals work correctly. Use it for handler behavior, and separately test startup and shutdown with a real process.
+
+**Optional addition · examples/notebook/app_test.go**
+
+```go
+func TestHealth(t *testing.T) {
+    app := newApp(&MemoryStore{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+    response := httptest.NewRecorder()
+    request := httptest.NewRequest(http.MethodGet, "/health", nil)
+    app.ServeHTTP(response, request)
+    if response.Code != http.StatusOK {
+        t.Fatalf("got %d, want 200", response.Code)
+    }
+    var body map[string]string
+    if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+        t.Fatal(err)
+    }
+    if body["status"] != "ok" { t.Fatalf("unexpected body: %v", body) }
+}
+```
+
+## Use a failure to verify the test {#section-2}
+
+From examples/notebook, run go test ./.... Then temporarily change the expected creation status in the existing test from 201 to 200. Run the tests again: they should fail. Restore 201 and rerun. A test you have seen fail for the right reason is easier to trust.
+
+Run go test -race ./... when your Go platform supports the race detector. This detects races only on paths actually exercised; a passing sequential test does not establish concurrency safety. To investigate the store under load, add concurrent Create calls and check that IDs are unique and the final count is correct.
+
+Read failures as evidence, not interruptions. A 415 where you expected 201 often means the test forgot Content-Type. A 404 might mean the path is wrong. Tests need debugging too.
+
+**Terminal · examples/notebook**
+
+```sh
+go test ./...
+go test -race ./...
+```
+
+::: {.callout-tip}
+## Try it yourself
+
+Why give each test a fresh MemoryStore?
+:::
+
+::: {.callout-note collapse=true}
+## Explanation
+
+So its outcome depends on its own setup, not the order of previous tests or leftover notes.
+:::
+
+## Further reading
+
+- [httptest](https://pkg.go.dev/net/http/httptest)
+- [Go testing](https://pkg.go.dev/testing)
