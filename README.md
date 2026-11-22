@@ -37,6 +37,18 @@ For a static local preview of rendered output:
 python3 -m http.server 4174 --bind 127.0.0.1 --directory _site
 ```
 
+
+## Export PDF and EPUB
+
+Install Python 3.9+, Pandoc 3.1.11+, and Typst 0.14+. For PDF output, also install the Noto CJK fonts with `Noto Serif CJK SC` and `Noto Sans Mono CJK SC`.
+
+```sh
+python3 scripts/export_book.py
+python3 scripts/export_book.py --language zh --format epub
+```
+
+By default, `_exports/` receives a PDF and EPUB for each language. Use `--output-dir` to direct files elsewhere. EPUB-only export does not need Typst. The downloads and the existing HTML editions are built from the same 14 chapters per language; the Quarto site workflow does not change.
+
 ## Go examples
 
 Use Go 1.22 or later; choose a currently supported Go release for development. Commands use a macOS/Linux shell; Windows users can use WSL.
@@ -71,3 +83,5 @@ The intended site address is `https://codeideaai.github.io/pocket-framework/`. I
 直接编辑 `en/` 与 `zh/` 下的 `.qmd` 正文，运行 `quarto preview` 预览或 `quarto render` 构建。完整打印版和示例下载包会自动生成，不需要维护第二份正文。
 
 GitHub Actions 会先验证 Go 示例，再构建和检查网站。仓库仍为私有时只构建、不部署；公开后可通过 GitHub Pages 发布。
+
+离线版：执行 `python3 scripts/export_book.py`，在 `_exports/` 获取中英文 PDF 和 EPUB；可用 `--language zh --format epub` 只生成中文版 EPUB。

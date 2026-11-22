@@ -8,3 +8,5 @@ assets/pocket-notes-examples.zip
 
 /.quarto/
 **/*.quarto_ipynb
+
+/_exports/
